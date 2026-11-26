@@ -7,6 +7,7 @@ import {VitePWA} from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
   return {
+    base: './',
     plugins: [
       react(),
       tailwindcss(),
@@ -23,7 +24,7 @@ export default defineConfig(() => {
           'data/gospels-en.json',
         ],
         manifest: {
-          id: '/',
+          id: './',
           name: 'يلا نجهز — رحلة الصوم',
           short_name: 'يلا نجهز',
           description:
@@ -31,25 +32,25 @@ export default defineConfig(() => {
           theme_color: '#DC2626',
           background_color: '#181214',
           display: 'standalone',
-          start_url: '/',
-          scope: '/',
+          start_url: './',
+          scope: './',
           lang: 'ar',
           dir: 'rtl',
           icons: [
             {
-              src: '/pwa-192x192.png',
+              src: 'pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/pwa-512x512.png',
+              src: 'pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/pwa-maskable-512x512.png',
+              src: 'pwa-maskable-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',

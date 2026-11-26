@@ -65,7 +65,7 @@ export const GospelReader: React.FC<GospelReaderProps> = ({
     setLoading(true);
     setError(false);
     try {
-      const res = await fetch(`/data/gospels-${targetLang}.json`);
+      const res = await fetch(`${import.meta.env.BASE_URL}data/gospels-${targetLang}.json`);
       if (!res.ok) throw new Error('Failed to load');
       const json = (await res.json()) as GospelsDataset;
       setDatasets((prev) => ({ ...prev, [targetLang]: json }));
