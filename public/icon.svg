@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="45%" r="55%">
+      <stop offset="0%" stop-color="#2A171B"/>
+      <stop offset="100%" stop-color="#181214"/>
+    </radialGradient>
+    <linearGradient id="heartGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EF4444"/>
+      <stop offset="55%" stop-color="#DC2626"/>
+      <stop offset="100%" stop-color="#991B1B"/>
+    </linearGradient>
+    <radialGradient id="softHalo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#DC2626" stop-opacity="0.38"/>
+      <stop offset="100%" stop-color="#DC2626" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bgGlow)"/>
+  <circle cx="256" cy="256" r="190" fill="url(#softHalo)"/>
+  <path d="M256 402c-7.5 0-14.7-2.8-20.3-7.9C152 318.6 96 266.7 96 196c0-53 41.2-94 94-94 29.8 0 58.3 13.9 76 36.2C283.7 115.9 312.2 102 342 102c52.8 0 94 41 94 94 0 70.7-56 122.6-139.7 198.1-5.6 5.1-12.8 7.9-20.3 7.9z" fill="url(#heartGrad)"/>
+  <path d="M256 184v116M214 226h84" stroke="#FFF7F5" stroke-width="18" stroke-linecap="round"/>
+</svg>
