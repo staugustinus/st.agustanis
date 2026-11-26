@@ -89,6 +89,7 @@ export interface AppConfig {
   heroIconSize: HeroIconSize;
   progressStyle?: ProgressStyle;
   journeyMigrated?: boolean;
+  updatedAt?: number;
   lentStartDate: string; // YYYY-MM-DD
   lentEndDate: string; // YYYY-MM-DD (default 2027-01-06)
   sequentialLock: boolean;

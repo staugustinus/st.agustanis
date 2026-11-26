@@ -180,27 +180,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleExportJson = () => {
-    const blob = new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json' });
+    const stamped = { ...draft, updatedAt: Date.now() };
+    const blob = new Blob([JSON.stringify(stamped, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'yalla-negahaz-config.json';
+    a.download = 'config.json';
     a.click();
     URL.revokeObjectURL(url);
-    onNotify(lang === 'ar' ? 'تم تنزيل ملف الإعدادات' : 'Config JSON downloaded');
+    onNotify(lang === 'ar' ? 'تم تنزيل config.json (ارفعه في مجلد public ليصل للجميع فوراً)' : 'Downloaded config.json (place in public/ to sync for everyone)');
   };
 
   const handleCopyShareLink = async () => {
     try {
       const { logoDataUrl: _omitLogo, ...lightweightConfig } = draft;
-      const jsonStr = JSON.stringify(lightweightConfig);
+      const stamped = { ...lightweightConfig, updatedAt: Date.now() };
+      const jsonStr = JSON.stringify(stamped);
       const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
       const shareUrl = `${window.location.origin}${window.location.pathname}#cfg=${encoded}`;
       await navigator.clipboard.writeText(shareUrl);
       onNotify(
         lang === 'ar'
-          ? 'تم نسخ رابط الإعدادات لمشاركته مع الأسرة'
-          : 'Shareable settings link copied to clipboard'
+          ? 'تم نسخ رابط الإعدادات المحدّث لمشاركته مع الأسرة'
+          : 'Updated shareable settings link copied to clipboard'
       );
     } catch {
       onNotify(lang === 'ar' ? 'تعذّر نسخ الرابط' : 'Could not copy link');
@@ -1290,6 +1292,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
               {activeTab === 'export' && (
                 <div className="space-y-5">
+                  <div className="p-3.5 app-control border border-[var(--accent)]/30 bg-[var(--accent-soft)]/50 text-xs text-stone-700 dark:text-stone-200 leading-relaxed">
+                    {lang === 'ar'
+                      ? 'التعديلات التي تحفظها هنا تُطبَّق على جهازك فوراً. لتصل إلى جميع الأشخاص الذين لديهم رابط الموقع تلقائياً: نزّل ملف config.json وارفعه داخل مجلد public على GitHub، أو شارك رابط الإعدادات المباشر.'
+                      : 'Saved changes apply immediately on this device. To push your settings to everyone who opens the link automatically, download config.json and place it in public/ on GitHub, or share the direct settings link.'}
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
                       type="button"
@@ -1297,7 +1305,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       className="min-h-[44px] px-4 py-2.5 app-control bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <Download className="w-4 h-4" />
-                      <span>{lang === 'ar' ? 'تصدير ملف الإعدادات (JSON)' : 'Export Settings JSON'}</span>
+                      <span>{lang === 'ar' ? 'تنزيل config.json للنشر للجميع' : 'Download config.json for Everyone'}</span>
                     </button>
 
                     <button

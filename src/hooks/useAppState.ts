@@ -159,6 +159,49 @@ export function useAppState() {
     }
   }, [state]);
 
+  // Automatically sync remote public/config.json when newer than locally cached config
+  useEffect(() => {
+    let active = true;
+    const syncRemoteConfig = async () => {
+      try {
+        const res = await fetch(`${import.meta.env.BASE_URL}config.json?t=${Date.now()}`, {
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const remote = (await res.json()) as Partial<AppConfig>;
+        if (!active || !remote || typeof remote !== 'object') return;
+        const remoteTs = typeof remote.updatedAt === 'number' ? remote.updatedAt : 0;
+        if (remoteTs <= 0) return;
+
+        setState((prev) => {
+          const localTs = typeof prev.config.updatedAt === 'number' ? prev.config.updatedAt : 0;
+          if (remoteTs <= localTs) return prev;
+          return {
+            ...prev,
+            config: {
+              ...mergeConfig(prev.config, remote),
+              updatedAt: remoteTs,
+            },
+          };
+        });
+      } catch {
+        // Offline or unavailable; keep local config cleanly
+      }
+    };
+
+    syncRemoteConfig();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncRemoteConfig();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      active = false;
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+
   useEffect(() => {
     const root = document.documentElement;
     root.lang = state.lang;
@@ -449,7 +492,13 @@ export function useAppState() {
   }, []);
 
   const saveConfig = useCallback((nextConfig: AppConfig) => {
-    setState((prev) => ({ ...prev, config: nextConfig }));
+    setState((prev) => ({
+      ...prev,
+      config: {
+        ...nextConfig,
+        updatedAt: Date.now(),
+      },
+    }));
   }, []);
 
   const importConfig = useCallback((incoming: Partial<AppConfig>) => {

@@ -59,8 +59,20 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,json}'],
+          globIgnores: ['**/config.json'],
           maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+          skipWaiting: true,
           runtimeCaching: [
+            {
+              urlPattern: /\/config\.json(\?.*)?$/i,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'live-config-cache',
+                networkTimeoutSeconds: 3,
+              },
+            },
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
               handler: 'CacheFirst',
