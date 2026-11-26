@@ -5,12 +5,15 @@ import {
   computeMaxUnlockedDay,
   computeSuggestedDay,
   DEFAULT_COMPETITION_END_DATE,
+  getChapterDay,
+  getChapterKey,
   getDayPlan,
   getDaysBetweenInclusive,
+  getPreviousChapter,
   getTodayDateString,
   TOTAL_GOSPEL_CHAPTERS,
 } from '../data/readingPlan';
-import type { AppConfig, AppState, Language, ThemeMode, UserAccount } from '../types';
+import type { AppConfig, AppState, GospelKey, Language, ThemeMode, UserAccount } from '../types';
 import { isValidTripleName, normalizeDigits, normalizeNameKey } from '../utils/digits';
 
 const STORAGE_KEY = 'yalla_negahaz_state_v2';
@@ -20,18 +23,32 @@ function mergeConfig(
   base: AppConfig,
   incoming?: Partial<AppConfig> | null
 ): AppConfig {
-  if (!incoming) return { ...base, pin2027Migrated: true };
+  if (!incoming) return { ...base, pin2027Migrated: true, journeyMigrated: true };
   const rawPin = incoming.adminPin ? normalizeDigits(incoming.adminPin).replace(/\s+/g, '') : '';
   const needs2027Upgrade = !incoming.pin2027Migrated && (!rawPin || rawPin === '1234');
+  const oldArCaption = 'يمتلئ القلب تدريجياً حتى يكتمل في نهاية الصوم';
+  const oldEnCaption = 'The heart fills day by day until Lent is complete';
+  const nextArCopy = { ...base.copy.ar, ...(incoming.copy?.ar || {}) };
+  const nextEnCopy = { ...base.copy.en, ...(incoming.copy?.en || {}) };
+  if (!incoming.journeyMigrated) {
+    if (nextArCopy.heartProgressCaption === oldArCaption) {
+      nextArCopy.heartProgressCaption = base.copy.ar.heartProgressCaption;
+    }
+    if (nextEnCopy.heartProgressCaption === oldEnCaption) {
+      nextEnCopy.heartProgressCaption = base.copy.en.heartProgressCaption;
+    }
+  }
   return {
     ...base,
     ...incoming,
+    progressStyle: !incoming.journeyMigrated ? 'journey' : incoming.progressStyle || 'journey',
+    journeyMigrated: true,
     adminPinEnabled: true,
     adminPin: needs2027Upgrade ? '2027' : rawPin || base.adminPin,
     pin2027Migrated: true,
     copy: {
-      ar: { ...base.copy.ar, ...(incoming.copy?.ar || {}) },
-      en: { ...base.copy.en, ...(incoming.copy?.en || {}) },
+      ar: nextArCopy,
+      en: nextEnCopy,
     },
     quotes:
       Array.isArray(incoming.quotes) && incoming.quotes.length > 0
@@ -219,6 +236,7 @@ export function useAppState() {
         pin: cleanPin,
         currentDay: 1,
         completedDays: [],
+        passedChapters: {},
         checkedPractices: {},
         readerFontSize: 21,
         planStartDate: getTodayDateString(),
@@ -282,6 +300,7 @@ export function useAppState() {
   }, []);
 
   const completedDays = activeUser?.completedDays || [];
+  const passedChapters = activeUser?.passedChapters || {};
   const checkedPractices = activeUser?.checkedPractices || {};
   const readerFontSize = activeUser?.readerFontSize || 21;
 
@@ -335,8 +354,47 @@ export function useAppState() {
     [state.config.sequentialLock, maxUnlockedDay, totalDays, updateActiveUser]
   );
 
+  const markChapterPassed = useCallback(
+    (book: GospelKey, chapter: number) => {
+      const key = getChapterKey(book, chapter);
+      updateActiveUser((u) => ({
+        ...u,
+        passedChapters: {
+          ...(u.passedChapters || {}),
+          [key]: true,
+        },
+      }));
+    },
+    [updateActiveUser]
+  );
+
+  const isChapterUnlocked = useCallback(
+    (book: GospelKey, chapter: number): boolean => {
+      if (!state.config.sequentialLock) return true;
+      const chDay = getChapterDay(book, chapter, readingPlan);
+      if (chDay > maxUnlockedDay) return false;
+      const prev = getPreviousChapter(book, chapter);
+      if (!prev) return true;
+      const prevKey = getChapterKey(prev.book, prev.chapter);
+      const prevDay = getChapterDay(prev.book, prev.chapter, readingPlan);
+      return Boolean(passedChapters[prevKey] || completedDays.includes(prevDay));
+    },
+    [state.config.sequentialLock, readingPlan, maxUnlockedDay, passedChapters, completedDays]
+  );
+
   const toggleDayCompleted = useCallback(
-    (day: number) => {
+    (day: number): { ok: boolean; missingQuizzes?: boolean } => {
+      const alreadyDone = completedDays.includes(day);
+      if (!alreadyDone && state.config.sequentialLock) {
+        const dayReadings = getDayPlan(day, readingPlan).readings;
+        const missing = dayReadings.some(
+          (r) => !passedChapters[getChapterKey(r.book, r.chapter)]
+        );
+        if (missing) {
+          return { ok: false, missingQuizzes: true };
+        }
+      }
+
       updateActiveUser((u) => {
         const exists = u.completedDays.includes(day);
         const nextDays = exists
@@ -351,8 +409,9 @@ export function useAppState() {
           currentDay: Math.min(u.currentDay, nextMax),
         };
       });
+      return { ok: true };
     },
-    [state.config.sequentialLock, totalDays, updateActiveUser]
+    [completedDays, passedChapters, readingPlan, state.config.sequentialLock, totalDays, updateActiveUser]
   );
 
   const togglePractice = useCallback(
@@ -444,6 +503,7 @@ export function useAppState() {
     readingPlan,
     currentDay,
     completedDays,
+    passedChapters,
     checkedPractices,
     readerFontSize,
     maxUnlockedDay,
@@ -454,6 +514,8 @@ export function useAppState() {
     toggleLang,
     toggleTheme,
     setCurrentDay,
+    markChapterPassed,
+    isChapterUnlocked,
     toggleDayCompleted,
     togglePractice,
     setReaderFontSize,

@@ -5,6 +5,7 @@ export type HeroIconKey = 'heart' | 'cross' | 'star' | 'flame' | 'book' | 'sun';
 export type RadiusPreset = 'sharp' | 'soft' | 'rounded';
 export type CardStylePreset = 'bordered' | 'elevated' | 'flat';
 export type HeroIconSize = 'sm' | 'md' | 'lg';
+export type ProgressStyle = 'journey' | 'heart';
 
 export interface GospelBook {
   nameAr: string;
@@ -18,6 +19,14 @@ export type GospelsDataset = Record<GospelKey, GospelBook>;
 export interface ChapterRef {
   book: GospelKey;
   chapter: number; // 1-indexed
+}
+
+export interface ChapterQuestion {
+  questionAr: string;
+  optionsAr: string[];
+  questionEn: string;
+  optionsEn: string[];
+  correctIndex: number;
 }
 
 export interface DayPlan {
@@ -78,6 +87,8 @@ export interface AppConfig {
   cardStyle: CardStylePreset;
   heroIcon: HeroIconKey;
   heroIconSize: HeroIconSize;
+  progressStyle?: ProgressStyle;
+  journeyMigrated?: boolean;
   lentStartDate: string; // YYYY-MM-DD
   lentEndDate: string; // YYYY-MM-DD (default 2027-01-06)
   sequentialLock: boolean;
@@ -95,6 +106,7 @@ export interface UserAccount {
   pin: string; // 4-digit ASCII string
   currentDay: number;
   completedDays: number[];
+  passedChapters?: Record<string, boolean>;
   checkedPractices: Record<string, boolean>;
   readerFontSize: number;
   planStartDate?: string; // YYYY-MM-DD when user joined

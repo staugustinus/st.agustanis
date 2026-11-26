@@ -12,14 +12,25 @@ import {
   Plus,
   RotateCcw,
   Save,
+  Search,
   Share2,
   Shield,
   Sparkles,
   Trash2,
   Upload,
+  Users,
   X,
 } from 'lucide-react';
-import { formatNumber, TOTAL_LENT_DAYS } from '../data/readingPlan';
+import {
+  buildReadingPlan,
+  DEFAULT_COMPETITION_END_DATE,
+  formatDateReadable,
+  formatNumber,
+  getDayPlan,
+  getDaysBetweenInclusive,
+  TOTAL_GOSPEL_CHAPTERS,
+  TOTAL_LENT_DAYS,
+} from '../data/readingPlan';
 import type {
   AppConfig,
   CardStylePreset,
@@ -27,8 +38,10 @@ import type {
   HeroIconKey,
   HeroIconSize,
   Language,
+  ProgressStyle,
   RadiusPreset,
   ThemeMode,
+  UserAccount,
 } from '../types';
 import { normalizeDigits } from '../utils/digits';
 import { HeroSymbol } from './HeroSymbol';
@@ -38,6 +51,8 @@ interface AdminPanelProps {
   lang: Language;
   theme: ThemeMode;
   config: AppConfig;
+  users: UserAccount[];
+  activeUserId: string | null;
   onClose: () => void;
   onSaveConfig: (nextConfig: AppConfig) => void;
   onImportConfig: (incoming: Partial<AppConfig>) => void;
@@ -45,7 +60,7 @@ interface AdminPanelProps {
   onNotify: (msg: string) => void;
 }
 
-type AdminTab = 'identity' | 'texts' | 'theme' | 'content' | 'export';
+type AdminTab = 'identity' | 'users' | 'texts' | 'theme' | 'content' | 'export';
 
 const ACCENT_PRESETS = [
   { nameAr: 'أحمر ياقوتي', nameEn: 'Ruby Red', hex: '#DC2626' },
@@ -69,6 +84,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   isOpen,
   lang,
   config,
+  users,
+  activeUserId,
   onClose,
   onSaveConfig,
   onImportConfig,
@@ -89,6 +106,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [selectedDay, setSelectedDay] = useState(1);
   const [selectedWeek, setSelectedWeek] = useState(1);
   const [importText, setImportText] = useState('');
+  const [userSearch, setUserSearch] = useState('');
+  const [userSort, setUserSort] = useState<'progress' | 'recent' | 'name'>('progress');
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const jsonFileInputRef = useRef<HTMLInputElement>(null);
@@ -273,11 +292,109 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const tabs: { key: AdminTab; labelAr: string; labelEn: string; icon: React.ReactNode }[] = [
     { key: 'identity', labelAr: 'الهوية والأمان', labelEn: 'Identity & Lock', icon: <Shield className="w-4 h-4" /> },
+    { key: 'users', labelAr: `المسجلون (${formatNumber(users.length, 'ar')})`, labelEn: `Users (${users.length})`, icon: <Users className="w-4 h-4" /> },
     { key: 'texts', labelAr: 'كل النصوص', labelEn: 'All Texts', icon: <FileText className="w-4 h-4" /> },
     { key: 'theme', labelAr: 'الأشكال والألوان', labelEn: 'Shapes & Theme', icon: <Palette className="w-4 h-4" /> },
     { key: 'content', labelAr: 'الأقوال والتداريب', labelEn: 'Quotes & Tasks', icon: <Sparkles className="w-4 h-4" /> },
     { key: 'export', labelAr: 'تصدير / استيراد', labelEn: 'Export / Import', icon: <Share2 className="w-4 h-4" /> },
   ];
+
+  // Compute progress metrics for every registered participant
+  const userRows = users.map((u) => {
+    const startDate = u.planStartDate || draft.lentStartDate || u.createdAt.slice(0, 10);
+    const endDate = draft.lentEndDate || DEFAULT_COMPETITION_END_DATE;
+    const userTotalDays = getDaysBetweenInclusive(startDate, endDate);
+    const userPlan = buildReadingPlan(userTotalDays);
+    const completedSet = new Set(
+      (u.completedDays || []).filter((d) => d >= 1 && d <= userTotalDays)
+    );
+    let completedChapters = 0;
+    for (const d of completedSet) {
+      completedChapters += getDayPlan(d, userPlan).readings.length;
+    }
+    const percent = Math.round((completedChapters / TOTAL_GOSPEL_CHAPTERS) * 100);
+    const passedQuizzesCount = Object.values(u.passedChapters || {}).filter(Boolean).length;
+    const practicesDone = Object.values(u.checkedPractices || {}).filter(Boolean).length;
+
+    const sortedDays = [...completedSet].sort((a, b) => a - b);
+    let streak = 0;
+    if (sortedDays.length > 0) {
+      let cursor = sortedDays[sortedDays.length - 1];
+      while (cursor >= 1 && completedSet.has(cursor)) {
+        streak++;
+        cursor--;
+      }
+    }
+
+    return {
+      user: u,
+      startDate,
+      userTotalDays,
+      completedDaysCount: completedSet.size,
+      completedChapters,
+      percent,
+      passedQuizzesCount,
+      practicesDone,
+      streak,
+      arrivedBethlehem: completedSet.size >= userTotalDays || percent >= 100,
+    };
+  });
+
+  const filteredUserRows = userRows
+    .filter((row) =>
+      row.user.fullName.toLowerCase().includes(userSearch.trim().toLowerCase())
+    )
+    .sort((a, b) => {
+      if (userSort === 'progress') {
+        return b.percent - a.percent || b.completedDaysCount - a.completedDaysCount;
+      }
+      if (userSort === 'name') {
+        return a.user.fullName.localeCompare(b.user.fullName, lang === 'ar' ? 'ar' : 'en');
+      }
+      return b.user.createdAt.localeCompare(a.user.createdAt);
+    });
+
+  const averagePercent =
+    userRows.length > 0
+      ? Math.round(userRows.reduce((sum, r) => sum + r.percent, 0) / userRows.length)
+      : 0;
+  const completedAllCount = userRows.filter((r) => r.arrivedBethlehem).length;
+
+  const handleExportUsersCsv = () => {
+    const header = [
+      'الاسم الثلاثي',
+      'تاريخ التسجيل',
+      'الأيام المكتملة',
+      'إجمالي أيام الخطة',
+      'الأصحاحات المقروءة',
+      'الأسئلة المحلولة',
+      'نسبة الإنجاز %',
+      'أيام متتالية',
+    ].join(',');
+    const lines = filteredUserRows.map((r) =>
+      [
+        `"${r.user.fullName.replace(/"/g, '""')}"`,
+        r.startDate,
+        r.completedDaysCount,
+        r.userTotalDays,
+        r.completedChapters,
+        r.passedQuizzesCount,
+        r.percent,
+        r.streak,
+      ].join(',')
+    );
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + [header, ...lines].join('\n')], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'yalla-negahaz-users-progress.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+    onNotify(lang === 'ar' ? 'تم تصدير تقرير المتابعة (CSV)' : 'Progress report CSV downloaded');
+  };
 
   const textFieldsList: [keyof CopyFields, string][] = [
     ['familyName', lang === 'ar' ? 'اسم الأسرة في الشريط العلوي' : 'Fellowship Name'],
@@ -285,7 +402,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     ['authWelcomeSubtitle', lang === 'ar' ? 'وصف شاشة التسجيل' : 'Auth Screen Subtitle'],
     ['heroTitle', lang === 'ar' ? 'العنوان الرئيسي' : 'Hero Title'],
     ['heroSubtitle', lang === 'ar' ? 'الجملة الترحيبية' : 'Welcome Subtitle'],
-    ['heartProgressCaption', lang === 'ar' ? 'نص أسفل قلب التقدّم' : 'Progress Heart Caption'],
+    ['heartProgressCaption', lang === 'ar' ? 'نص أسفل مسار التقدّم' : 'Progress Path Caption'],
     ['pwaTitle', lang === 'ar' ? 'عنوان بطاقة تثبيت التطبيق' : 'PWA Banner Title'],
     ['pwaDesc', lang === 'ar' ? 'وصف بطاقة تثبيت التطبيق' : 'PWA Banner Description'],
     ['pwaInstallBtn', lang === 'ar' ? 'نص زر التثبيت' : 'PWA Install Button'],
@@ -543,6 +660,194 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               )}
 
+              {activeTab === 'users' && (
+                <div className="space-y-4">
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <div className="p-3 app-control border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-black/20 text-center">
+                      <div className="text-xl sm:text-2xl font-extrabold text-stone-900 dark:text-white tabular-nums">
+                        {formatNumber(userRows.length, lang)}
+                      </div>
+                      <div className="text-[11px] font-semibold text-stone-500 dark:text-stone-400">
+                        {lang === 'ar' ? 'إجمالي المسجلين' : 'Total Registered'}
+                      </div>
+                    </div>
+                    <div className="p-3 app-control border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-black/20 text-center">
+                      <div className="text-xl sm:text-2xl font-extrabold text-[var(--accent)] tabular-nums">
+                        {formatNumber(averagePercent, lang)}%
+                      </div>
+                      <div className="text-[11px] font-semibold text-stone-500 dark:text-stone-400">
+                        {lang === 'ar' ? 'متوسط التقدّم' : 'Avg. Progress'}
+                      </div>
+                    </div>
+                    <div className="p-3 app-control border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-black/20 text-center">
+                      <div className="text-xl sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                        {formatNumber(completedAllCount, lang)}
+                      </div>
+                      <div className="text-[11px] font-semibold text-stone-500 dark:text-stone-400">
+                        {lang === 'ar' ? 'وصلوا بيت لحم' : 'Completed 100%'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Search, Sort & Export Controls */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative flex-1 min-w-[180px]">
+                      <Search className="w-4 h-4 text-stone-400 absolute top-1/2 -translate-y-1/2 start-3 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={userSearch}
+                        onChange={(e) => setUserSearch(e.target.value)}
+                        placeholder={lang === 'ar' ? 'ابحث بالاسم الثلاثي...' : 'Search by name...'}
+                        className="w-full min-h-[38px] ps-9 pe-3 app-control border border-stone-300 dark:border-white/15 bg-stone-50 dark:bg-black/25 text-xs sm:text-sm text-stone-900 dark:text-white"
+                      />
+                    </div>
+
+                    <select
+                      value={userSort}
+                      onChange={(e) => setUserSort(e.target.value as 'progress' | 'recent' | 'name')}
+                      className="min-h-[38px] px-2.5 app-control border border-stone-300 dark:border-white/15 bg-stone-50 dark:bg-black/25 text-xs font-bold text-stone-800 dark:text-stone-200"
+                    >
+                      <option value="progress">
+                        {lang === 'ar' ? 'ترتيب: الأعلى تقدماً' : 'Sort: Top Progress'}
+                      </option>
+                      <option value="recent">
+                        {lang === 'ar' ? 'ترتيب: الأحدث تسجيلاً' : 'Sort: Most Recent'}
+                      </option>
+                      <option value="name">
+                        {lang === 'ar' ? 'ترتيب: أبجدياً' : 'Sort: Name'}
+                      </option>
+                    </select>
+
+                    {userRows.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleExportUsersCsv}
+                        className="min-h-[38px] px-3 app-control bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>{lang === 'ar' ? 'تصدير CSV' : 'Export CSV'}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Users List */}
+                  {filteredUserRows.length === 0 ? (
+                    <div className="p-8 text-center app-control border border-dashed border-stone-300 dark:border-white/15 text-xs sm:text-sm text-stone-500 dark:text-stone-400">
+                      {users.length === 0
+                        ? lang === 'ar'
+                          ? 'لم يسجل أي مستخدم على هذا الجهاز بعد.'
+                          : 'No registered users on this device yet.'
+                        : lang === 'ar'
+                        ? 'لا توجد نتائج مطابقة للبحث.'
+                        : 'No matching users found.'}
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {filteredUserRows.map((row) => {
+                        const isActive = row.user.id === activeUserId;
+                        return (
+                          <div
+                            key={row.user.id}
+                            className={`p-3.5 sm:p-4 app-control border space-y-2.5 ${
+                              isActive
+                                ? 'border-[var(--accent)]/50 bg-[var(--accent-soft)]/50'
+                                : 'border-stone-200 dark:border-white/10 bg-stone-50/80 dark:bg-black/20'
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-sm sm:text-base font-bold text-stone-900 dark:text-white">
+                                    {row.user.fullName}
+                                  </span>
+                                  {isActive && (
+                                    <span className="px-2 py-0.5 rounded-md bg-[var(--accent)] text-white text-[10px] font-bold">
+                                      {lang === 'ar' ? 'نشط الآن' : 'Active'}
+                                    </span>
+                                  )}
+                                  {row.arrivedBethlehem && (
+                                    <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-bold">
+                                      {lang === 'ar' ? 'وصل بيت لحم' : 'Bethlehem'}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">
+                                  {lang === 'ar'
+                                    ? `تاريخ الانضمام: ${formatDateReadable(row.startDate, 'ar')} · الخطة: ${formatNumber(
+                                        row.userTotalDays,
+                                        'ar'
+                                      )} يوماً`
+                                    : `Joined: ${formatDateReadable(row.startDate, 'en')} · Plan: ${row.userTotalDays} days`}
+                                </div>
+                              </div>
+
+                              <div className="text-end tabular-nums">
+                                <span className="text-lg font-extrabold text-[var(--accent)]">
+                                  {formatNumber(row.percent, lang)}%
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Progress Bar */}
+                            <div className="w-full h-2 rounded-full bg-stone-200 dark:bg-white/10 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-300 ${
+                                  row.arrivedBethlehem ? 'bg-emerald-500' : 'bg-[var(--accent)]'
+                                }`}
+                                style={{ width: `${row.percent}%` }}
+                              />
+                            </div>
+
+                            {/* Detailed Metrics */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-stone-600 dark:text-stone-300 tabular-nums pt-0.5">
+                              <div>
+                                <span className="text-stone-400 dark:text-stone-500">
+                                  {lang === 'ar' ? 'الأيام: ' : 'Days: '}
+                                </span>
+                                <span className="font-bold">
+                                  {formatNumber(row.completedDaysCount, lang)} / {formatNumber(row.userTotalDays, lang)}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-stone-400 dark:text-stone-500">
+                                  {lang === 'ar' ? 'الأصحاحات: ' : 'Chapters: '}
+                                </span>
+                                <span className="font-bold">
+                                  {formatNumber(row.completedChapters, lang)} / {formatNumber(TOTAL_GOSPEL_CHAPTERS, lang)}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-stone-400 dark:text-stone-500">
+                                  {lang === 'ar' ? 'الأسئلة: ' : 'Quizzes: '}
+                                </span>
+                                <span className="font-bold">
+                                  {formatNumber(row.passedQuizzesCount, lang)} / {formatNumber(TOTAL_GOSPEL_CHAPTERS, lang)}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-stone-400 dark:text-stone-500">
+                                  {lang === 'ar' ? 'التتابع: ' : 'Streak: '}
+                                </span>
+                                <span className="font-bold">
+                                  {formatNumber(row.streak, lang)} {lang === 'ar' ? 'يوم' : 'd'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <p className="text-[11px] text-stone-500 dark:text-stone-400 pt-1">
+                    {lang === 'ar'
+                      ? 'ملاحظة: يعرض هذا القسم جميع الحسابات المسجّلة والمحفوظة على هذا المتصفح/الجهاز.'
+                      : 'Note: This view shows all user accounts registered and stored on this browser/device.'}
+                  </p>
+                </div>
+              )}
+
               {activeTab === 'texts' && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
@@ -780,10 +1085,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   </div>
 
-                  {/* Hero Icon Size */}
+                  {/* Progress Visual Style */}
                   <div className="space-y-2">
                     <label className="block text-sm font-bold text-stone-800 dark:text-stone-100">
-                      {lang === 'ar' ? 'حجم قلب التقدّم الرئيسي' : 'Progress Heart Size'}
+                      {lang === 'ar' ? 'شكل عرض التقدّم الرئيسي' : 'Main Progress Display Style'}
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(
+                        [
+                          ['journey', lang === 'ar' ? 'الطريق إلى بيت لحم (مريم ويوسف)' : 'Road to Bethlehem (Mary & Joseph)'],
+                          ['heart', lang === 'ar' ? 'قلب التقدّم الكلاسيكي' : 'Classic Filling Heart'],
+                        ] as [ProgressStyle, string][]
+                      ).map(([styleKey, label]) => (
+                        <button
+                          key={styleKey}
+                          type="button"
+                          onClick={() =>
+                            updateDraft((p) => ({ ...p, progressStyle: styleKey, journeyMigrated: true }))
+                          }
+                          className={`min-h-[42px] px-3 app-control border text-xs font-bold cursor-pointer transition-colors ${
+                            (draft.progressStyle || 'journey') === styleKey
+                              ? 'bg-[var(--accent)] text-white border-[var(--accent)]'
+                              : 'border-stone-200 dark:border-white/10 text-stone-700 dark:text-stone-300'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Hero Progress Size */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-bold text-stone-800 dark:text-stone-100">
+                      {lang === 'ar' ? 'حجم عرض التقدّم الرئيسي' : 'Main Progress Size'}
                     </label>
                     <div className="grid grid-cols-3 gap-2">
                       {(

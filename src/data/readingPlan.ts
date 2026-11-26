@@ -18,7 +18,7 @@ export const GOSPEL_ORDER: {
 ];
 
 // Build flat sequential list of all 89 chapters across Matthew (28), Mark (16), Luke (24), John (21)
-const ALL_CHAPTERS: ChapterRef[] = GOSPEL_ORDER.flatMap((g) =>
+export const ALL_CHAPTERS: ChapterRef[] = GOSPEL_ORDER.flatMap((g) =>
   Array.from({ length: g.chaptersCount }, (_, idx) => ({
     book: g.key,
     chapter: idx + 1,
@@ -196,4 +196,20 @@ export function getChapterDay(
     }
   }
   return 1;
+}
+
+export function getChapterKey(book: GospelKey, chapter: number): string {
+  return `${book}-${chapter}`;
+}
+
+export function getPreviousChapter(book: GospelKey, chapter: number): ChapterRef | null {
+  const idx = ALL_CHAPTERS.findIndex((c) => c.book === book && c.chapter === chapter);
+  if (idx <= 0) return null;
+  return ALL_CHAPTERS[idx - 1];
+}
+
+export function getNextChapter(book: GospelKey, chapter: number): ChapterRef | null {
+  const idx = ALL_CHAPTERS.findIndex((c) => c.book === book && c.chapter === chapter);
+  if (idx < 0 || idx >= ALL_CHAPTERS.length - 1) return null;
+  return ALL_CHAPTERS[idx + 1];
 }

@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { AdminPanel } from './components/AdminPanel';
 import { AuthGate } from './components/AuthGate';
+import { BethlehemJourney } from './components/BethlehemJourney';
 import { GospelReader } from './components/GospelReader';
 import { Header } from './components/Header';
 import { HeroSymbol } from './components/HeroSymbol';
@@ -26,6 +27,7 @@ export default function App() {
     readingPlan,
     currentDay,
     completedDays,
+    passedChapters,
     checkedPractices,
     readerFontSize,
     maxUnlockedDay,
@@ -36,6 +38,8 @@ export default function App() {
     toggleLang,
     toggleTheme,
     setCurrentDay,
+    markChapterPassed,
+    isChapterUnlocked,
     toggleDayCompleted,
     togglePractice,
     setReaderFontSize,
@@ -86,6 +90,14 @@ export default function App() {
       state.lang === 'ar'
         ? `لا يمكنك فتح اليوم ${formatNumber(targetDay, 'ar')} قبل إنهاء اليوم ${formatNumber(requiredDay, 'ar')} أولاً`
         : `Complete Day ${requiredDay} first before opening Day ${targetDay}`
+    );
+  };
+
+  const handleLockedChapterAttempt = () => {
+    showToast(
+      state.lang === 'ar'
+        ? 'أجب عن سؤال الأصحاح السابق إجابة صحيحة أولاً لفتح هذا الأصحاح'
+        : 'Answer the previous chapter’s question correctly first to unlock this chapter'
     );
   };
 
@@ -149,14 +161,27 @@ export default function App() {
                 {copy.heroSubtitle}
               </p>
 
-              {/* Heart that fills gradually from 0% to 100% until all readings are complete */}
-              <ProgressHeart
-                percent={stats.percent}
-                lang={state.lang}
-                icon={state.config.heroIcon}
-                size={state.config.heroIconSize || 'md'}
-                caption={copy.heartProgressCaption}
-              />
+              {/* Journey to Bethlehem road progress (or classic heart if configured) */}
+              {(state.config.progressStyle || 'journey') === 'journey' ? (
+                <BethlehemJourney
+                  completedDaysCount={stats.completedDaysCount}
+                  totalDays={totalDays}
+                  percent={stats.percent}
+                  currentDay={currentDay}
+                  lang={state.lang}
+                  theme={state.theme}
+                  size={state.config.heroIconSize || 'md'}
+                  caption={copy.heartProgressCaption}
+                />
+              ) : (
+                <ProgressHeart
+                  percent={stats.percent}
+                  lang={state.lang}
+                  icon={state.config.heroIcon}
+                  size={state.config.heroIconSize || 'md'}
+                  caption={copy.heartProgressCaption}
+                />
+              )}
             </section>
 
             {/* 3. PWA Install Banner */}
@@ -208,6 +233,8 @@ export default function App() {
               maxUnlockedDay={maxUnlockedDay}
               sequentialLock={state.config.sequentialLock}
               isDayCompleted={isDayCompleted}
+              passedChapters={passedChapters}
+              isChapterUnlocked={isChapterUnlocked}
               fontSize={readerFontSize}
               title={copy.gospelSectionTitle}
               editionLabel={copy.gospelEditionLabel}
@@ -215,13 +242,30 @@ export default function App() {
               markReadDoneBtn={copy.markReadDoneBtn}
               encouragementMsg={copy.encouragementMsg}
               onFontSizeChange={setReaderFontSize}
+              onPassChapter={(book, ch) => {
+                markChapterPassed(book, ch);
+                showToast(
+                  state.lang === 'ar'
+                    ? 'إجابة صحيحة! تم فتح الأصحاح التالي'
+                    : 'Correct! Next chapter is unlocked'
+                );
+              }}
               onToggleDayCompleted={() => {
-                toggleDayCompleted(currentDay);
+                const res = toggleDayCompleted(currentDay);
+                if (!res.ok && res.missingQuizzes) {
+                  showToast(
+                    state.lang === 'ar'
+                      ? 'أجب عن أسئلة جميع أصحاحات اليوم أولاً لإتمام القراءة'
+                      : 'Answer all of today’s chapter questions first to complete the day'
+                  );
+                  return;
+                }
                 if (!isDayCompleted) {
                   showToast(copy.encouragementMsg);
                 }
               }}
               onLockedDayAttempt={handleLockedDayAttempt}
+              onLockedChapterAttempt={() => handleLockedChapterAttempt()}
               onShareText={handleShareText}
             />
 
@@ -262,6 +306,8 @@ export default function App() {
         lang={state.lang}
         theme={state.theme}
         config={state.config}
+        users={existingUsersList}
+        activeUserId={state.activeUserId}
         onClose={() => setAdminOpen(false)}
         onSaveConfig={saveConfig}
         onImportConfig={importConfig}
