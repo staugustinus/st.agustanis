@@ -17,6 +17,7 @@ import { OfflineIndicator, PWABanner } from './components/PWABanner';
 import { QuoteAndPractices } from './components/QuoteAndPractices';
 import { formatNumber, getDayPlan, getQuoteDayForPlanDay } from './data/readingPlan';
 import { useAppState } from './hooks/useAppState';
+import { useCalmMusic } from './hooks/useCalmMusic';
 
 export default function App() {
   const {
@@ -54,8 +55,10 @@ export default function App() {
     importConfig,
     resetConfigToDefaults,
     jumpToToday,
+    refreshCloudUsers,
   } = useAppState();
 
+  const { isMusicPlaying, toggleMusic } = useCalmMusic();
   const [adminOpen, setAdminOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -125,6 +128,7 @@ export default function App() {
           lang={state.lang}
           theme={state.theme}
           christmasTheme={christmasEnabled}
+          musicPlaying={isMusicPlaying}
           familyName={copy.familyName}
           heroTitle={copy.heroTitle}
           authWelcomeTitle={copy.authWelcomeTitle}
@@ -136,6 +140,7 @@ export default function App() {
           existingUsers={existingUsersList}
           onToggleLang={toggleLang}
           onToggleTheme={toggleTheme}
+          onToggleMusic={() => void toggleMusic()}
           onOpenAdmin={() => setAdminOpen(true)}
           onRegister={registerUser}
           onLogin={loginUser}
@@ -147,12 +152,14 @@ export default function App() {
             lang={state.lang}
             theme={state.theme}
             christmasTheme={christmasEnabled}
+            musicPlaying={isMusicPlaying}
             familyName={copy.familyName}
             userName={activeUser.fullName}
             logoDataUrl={state.config.logoDataUrl}
             heroIcon={state.config.heroIcon}
             onToggleLang={toggleLang}
             onToggleTheme={toggleTheme}
+            onToggleMusic={() => void toggleMusic()}
             onOpenAdmin={() => setAdminOpen(true)}
             onLogout={logoutUser}
           />
@@ -329,6 +336,7 @@ export default function App() {
         isAdminVerified={isAdminVerified}
         onGoogleSignIn={signInDeveloperGoogle}
         onGoogleSignOut={signOutDeveloperGoogle}
+        onRefreshUsers={refreshCloudUsers}
         onClose={() => setAdminOpen(false)}
         onSaveConfig={saveConfig}
         onImportConfig={importConfig}

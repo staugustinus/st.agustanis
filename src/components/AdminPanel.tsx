@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Check,
+  ChevronDown,
   Cloud,
   CloudOff,
   Copy,
@@ -13,6 +14,7 @@ import {
   LogOut,
   Palette,
   Plus,
+  RefreshCw,
   RotateCcw,
   Save,
   Search,
@@ -30,10 +32,12 @@ import {
   DEFAULT_COMPETITION_END_DATE,
   formatDateReadable,
   formatNumber,
+  getChapterKey,
   getChapterPaceSummary,
   getDayPlan,
   getDaysBetweenInclusive,
   getEffectiveStartDate,
+  GOSPEL_ORDER,
   TOTAL_GOSPEL_CHAPTERS,
   TOTAL_LENT_DAYS,
 } from '../data/readingPlan';
@@ -67,6 +71,7 @@ interface AdminPanelProps {
     errorMessage?: string;
   }>;
   onGoogleSignOut: () => Promise<void>;
+  onRefreshUsers?: () => Promise<boolean>;
   onClose: () => void;
   onSaveConfig: (
     nextConfig: AppConfig
@@ -136,6 +141,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   isAdminVerified,
   onGoogleSignIn,
   onGoogleSignOut,
+  onRefreshUsers,
   onClose,
   onSaveConfig,
   onImportConfig,
@@ -161,20 +167,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [importText, setImportText] = useState('');
   const [userSearch, setUserSearch] = useState('');
   const [userSort, setUserSort] = useState<'progress' | 'recent' | 'name'>('progress');
+  const [expandedUserIds, setExpandedUserIds] = useState<Record<string, boolean>>({});
+  const [refreshingUsers, setRefreshingUsers] = useState(false);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const jsonFileInputRef = useRef<HTMLInputElement>(null);
+  const wasOpenRef = useRef(false);
 
-  // Reset lock and sync draft whenever modal opens
+  // Reset lock ONLY when modal opens from closed state (never kick developer out on background syncs)
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !wasOpenRef.current) {
       setUnlocked(false);
       setPinInput('');
       setPinError(false);
       setDraft(config);
       setHasChanges(false);
       setEditLang(lang);
+      setExpandedUserIds({});
     }
+    wasOpenRef.current = isOpen;
   }, [isOpen, config, lang]);
 
   if (!isOpen) return null;
@@ -417,7 +428,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     { key: 'export', labelAr: 'تصدير / استيراد', labelEn: 'Export / Import', icon: <Share2 className="w-4 h-4" /> },
   ];
 
-  // Compute progress metrics for every registered participant
+  // Compute full progress metrics (days, chapters union, per-Gospel breakdown, quizzes, practices, streak)
   const userRows = users.map((u) => {
     const startDate = u.planStartDate || draft.lentStartDate || u.createdAt.slice(0, 10);
     const endDate = draft.lentEndDate || DEFAULT_COMPETITION_END_DATE;
@@ -426,13 +437,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const completedSet = new Set(
       (u.completedDays || []).filter((d) => d >= 1 && d <= userTotalDays)
     );
-    let completedChapters = 0;
+    const completedChapterKeys = new Set<string>();
     for (const d of completedSet) {
-      completedChapters += getDayPlan(d, userPlan).readings.length;
+      for (const ref of getDayPlan(d, userPlan).readings) {
+        completedChapterKeys.add(getChapterKey(ref.book, ref.chapter));
+      }
     }
+    for (const [k, passed] of Object.entries(u.passedChapters || {})) {
+      if (passed) completedChapterKeys.add(k);
+    }
+    const completedChapters = Math.min(TOTAL_GOSPEL_CHAPTERS, completedChapterKeys.size);
     const percent = Math.round((completedChapters / TOTAL_GOSPEL_CHAPTERS) * 100);
     const passedQuizzesCount = Object.values(u.passedChapters || {}).filter(Boolean).length;
     const practicesDone = Object.values(u.checkedPractices || {}).filter(Boolean).length;
+
+    const gospelBreakdown = GOSPEL_ORDER.map((g) => {
+      let done = 0;
+      for (let ch = 1; ch <= g.chaptersCount; ch++) {
+        if (completedChapterKeys.has(getChapterKey(g.key, ch))) {
+          done++;
+        }
+      }
+      return {
+        key: g.key,
+        nameAr: g.shortAr,
+        nameEn: g.nameEn,
+        done,
+        total: g.chaptersCount,
+      };
+    });
 
     const sortedDays = [...completedSet].sort((a, b) => a - b);
     let streak = 0;
@@ -448,11 +481,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       user: u,
       startDate,
       userTotalDays,
+      completedDaysList: sortedDays,
       completedDaysCount: completedSet.size,
       completedChapters,
       percent,
       passedQuizzesCount,
       practicesDone,
+      gospelBreakdown,
       streak,
       arrivedBethlehem: completedSet.size >= userTotalDays || percent >= 100,
     };
@@ -875,6 +910,76 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
               {activeTab === 'users' && (
                 <div className="space-y-4">
+                  {/* Cloud Verification Callout or Live Sync Refresh */}
+                  {!isAdminVerified ? (
+                    <div className="p-3.5 app-control border border-amber-300 dark:border-amber-500/40 bg-amber-50/90 dark:bg-amber-950/25 flex flex-wrap items-center justify-between gap-2.5">
+                      <div className="text-xs text-amber-900 dark:text-amber-100 leading-relaxed">
+                        <span className="font-bold block">
+                          {lang === 'ar'
+                            ? 'لعرض كل المسجلين وتقدمهم من جميع الموبايلات:'
+                            : 'Load all registered users from every device:'}
+                        </span>
+                        <span>
+                          {lang === 'ar'
+                            ? 'اربط حساب المطور بجوجل ليظهر تقدم جميع المشاركين لحظياً.'
+                            : 'Connect your Developer Google account to sync all participants live.'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={googleAuthBusy}
+                        onClick={handleGoogleConnect}
+                        className="min-h-[36px] px-3 py-1.5 app-control bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-60 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
+                      >
+                        <Cloud className="w-3.5 h-3.5" />
+                        <span>
+                          {googleAuthBusy
+                            ? lang === 'ar'
+                              ? 'جارٍ الربط...'
+                              : 'Connecting...'
+                            : lang === 'ar'
+                            ? 'ربط حساب جوجل'
+                            : 'Connect Google'}
+                        </span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 px-3.5 app-control border border-emerald-300/70 dark:border-emerald-700/40 bg-emerald-50/70 dark:bg-emerald-950/20 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="font-bold text-emerald-800 dark:text-emerald-200 flex items-center gap-1.5">
+                        <Cloud className="w-3.5 h-3.5 shrink-0" />
+                        <span>
+                          {lang === 'ar'
+                            ? `متصل بالسحابة — يعرض تقدم كل المسجلين (${formatNumber(userRows.length, 'ar')})`
+                            : `Cloud live — showing all ${userRows.length} registered users`}
+                        </span>
+                      </span>
+                      {onRefreshUsers && (
+                        <button
+                          type="button"
+                          disabled={refreshingUsers}
+                          onClick={async () => {
+                            setRefreshingUsers(true);
+                            const ok = await onRefreshUsers();
+                            setRefreshingUsers(false);
+                            onNotify(
+                              ok
+                                ? lang === 'ar'
+                                  ? 'تم تحديث قائمة تقدم المسجلين'
+                                  : 'Participants progress refreshed'
+                                : lang === 'ar'
+                                ? 'تعذّر تحديث القائمة'
+                                : 'Could not refresh list'
+                            );
+                          }}
+                          className="min-h-[30px] px-2.5 py-1 app-control border border-emerald-400/50 dark:border-emerald-600/40 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 font-bold flex items-center gap-1 cursor-pointer disabled:opacity-60"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${refreshingUsers ? 'animate-spin' : ''}`} />
+                          <span>{lang === 'ar' ? 'تحديث' : 'Refresh'}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   {/* Summary Cards */}
                   <div className="grid grid-cols-3 gap-2.5">
                     <div className="p-3 app-control border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-black/20 text-center">
@@ -958,10 +1063,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   ) : (
                     <div className="space-y-2.5">
                       {filteredUserRows.map((row) => {
+                        const rowKey = row.user.cloudId || row.user.id;
                         const isActive = row.user.id === activeUserId;
+                        const isDetailOpen = Boolean(expandedUserIds[rowKey]);
+                        const lastUpdatedLabel = row.user.updatedAt
+                          ? new Intl.DateTimeFormat(lang === 'ar' ? 'ar-EG' : 'en-US', {
+                              day: 'numeric',
+                              month: 'short',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            }).format(new Date(row.user.updatedAt))
+                          : null;
+
                         return (
                           <div
-                            key={row.user.id}
+                            key={rowKey}
                             className={`p-3.5 sm:p-4 app-control border space-y-2.5 ${
                               isActive
                                 ? 'border-[var(--accent)]/50 bg-[var(--accent-soft)]/50'
@@ -990,15 +1106,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                     ? `تاريخ الانضمام: ${formatDateReadable(row.startDate, 'ar')} · الخطة: ${formatNumber(
                                         row.userTotalDays,
                                         'ar'
-                                      )} يوماً`
-                                    : `Joined: ${formatDateReadable(row.startDate, 'en')} · Plan: ${row.userTotalDays} days`}
+                                      )} يوماً · اليوم الحالي: ${formatNumber(row.user.currentDay || 1, 'ar')}`
+                                    : `Joined: ${formatDateReadable(row.startDate, 'en')} · Plan: ${row.userTotalDays}d · Day ${row.user.currentDay || 1}`}
                                 </div>
                               </div>
 
-                              <div className="text-end tabular-nums">
+                              <div className="text-end tabular-nums flex items-center gap-2">
                                 <span className="text-lg font-extrabold text-[var(--accent)]">
                                   {formatNumber(row.percent, lang)}%
                                 </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setExpandedUserIds((prev) => ({
+                                      ...prev,
+                                      [rowKey]: !prev[rowKey],
+                                    }))
+                                  }
+                                  aria-expanded={isDetailOpen}
+                                  className="min-h-[30px] px-2 py-1 app-control border border-stone-200 dark:border-white/15 bg-white dark:bg-white/5 hover:bg-stone-100 dark:hover:bg-white/10 text-[11px] font-bold text-stone-700 dark:text-stone-200 flex items-center gap-1 cursor-pointer"
+                                >
+                                  <span>{lang === 'ar' ? 'التفاصيل' : 'Details'}</span>
+                                  <ChevronDown
+                                    className={`w-3.5 h-3.5 transition-transform ${
+                                      isDetailOpen ? 'rotate-180' : ''
+                                    }`}
+                                  />
+                                </button>
                               </div>
                             </div>
 
@@ -1013,7 +1147,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             </div>
 
                             {/* Detailed Metrics */}
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-stone-600 dark:text-stone-300 tabular-nums pt-0.5">
+                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px] text-stone-600 dark:text-stone-300 tabular-nums pt-0.5">
                               <div>
                                 <span className="text-stone-400 dark:text-stone-500">
                                   {lang === 'ar' ? 'الأيام: ' : 'Days: '}
@@ -1040,6 +1174,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               </div>
                               <div>
                                 <span className="text-stone-400 dark:text-stone-500">
+                                  {lang === 'ar' ? 'التداريب: ' : 'Tasks: '}
+                                </span>
+                                <span className="font-bold">
+                                  {formatNumber(row.practicesDone, lang)}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-stone-400 dark:text-stone-500">
                                   {lang === 'ar' ? 'التتابع: ' : 'Streak: '}
                                 </span>
                                 <span className="font-bold">
@@ -1047,21 +1189,72 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 </span>
                               </div>
                             </div>
+
+                            {/* Full Breakdown Drawer per User */}
+                            {isDetailOpen && (
+                              <div className="pt-2.5 mt-1 border-t border-stone-200/80 dark:border-white/10 space-y-3 text-xs">
+                                {/* Per-Gospel Progress */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                  {row.gospelBreakdown.map((g) => {
+                                    const gPct = Math.round((g.done / g.total) * 100);
+                                    return (
+                                      <div
+                                        key={g.key}
+                                        className="p-2 rounded-lg bg-white dark:bg-black/25 border border-stone-200/80 dark:border-white/10 space-y-1"
+                                      >
+                                        <div className="flex items-center justify-between text-[11px] font-bold">
+                                          <span className="text-stone-700 dark:text-stone-200">
+                                            {lang === 'ar' ? g.nameAr : g.nameEn}
+                                          </span>
+                                          <span className="text-[var(--accent)] tabular-nums">
+                                            {formatNumber(g.done, lang)}/{formatNumber(g.total, lang)}
+                                          </span>
+                                        </div>
+                                        <div className="h-1.5 rounded-full bg-stone-200 dark:bg-white/10 overflow-hidden">
+                                          <div
+                                            className="h-full bg-[var(--accent)] rounded-full"
+                                            style={{ width: `${gPct}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Completed Days Badges & Last Activity */}
+                                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-500 dark:text-stone-400">
+                                  <div className="flex flex-wrap items-center gap-1">
+                                    <span className="font-semibold">
+                                      {lang === 'ar' ? 'الأيام المكتملة:' : 'Completed days:'}
+                                    </span>
+                                    {row.completedDaysList.length === 0 ? (
+                                      <span>{lang === 'ar' ? 'لا يوجد بعد' : 'None yet'}</span>
+                                    ) : (
+                                      row.completedDaysList.map((d) => (
+                                        <span
+                                          key={d}
+                                          className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold tabular-nums"
+                                        >
+                                          {formatNumber(d, lang)}
+                                        </span>
+                                      ))
+                                    )}
+                                  </div>
+                                  {lastUpdatedLabel && (
+                                    <span className="tabular-nums">
+                                      {lang === 'ar'
+                                        ? `آخر نشاط: ${lastUpdatedLabel}`
+                                        : `Last active: ${lastUpdatedLabel}`}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
                     </div>
                   )}
-
-                  <p className="text-[11px] text-stone-500 dark:text-stone-400 pt-1">
-                    {isAdminVerified
-                      ? lang === 'ar'
-                        ? 'ملاحظة: يعرض هذا القسم جميع المسجلين وتطوّر قراءتهم مباشرة عبر السحابة من كافة الأجهزة.'
-                        : 'Note: Showing all registered participants and live reading progress synced from all devices.'
-                      : lang === 'ar'
-                      ? 'ملاحظة: لعرض جميع المسجلين من كافة الأجهزة، اضغط "ربط حساب المطور بجوجل" في الأعلى.'
-                      : 'Note: Connect your Developer Google account above to load registered users from all devices.'}
-                  </p>
                 </div>
               )}
 

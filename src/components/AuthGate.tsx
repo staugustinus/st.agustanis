@@ -1,5 +1,19 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Globe, KeyRound, Lock, LogIn, Moon, Settings, Sun, UserCheck, UserPlus } from 'lucide-react';
+import {
+  Eye,
+  EyeOff,
+  Globe,
+  KeyRound,
+  Lock,
+  LogIn,
+  Moon,
+  Settings,
+  Sun,
+  UserCheck,
+  UserPlus,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import {
   formatDateReadable,
   formatNumber,
@@ -18,6 +32,7 @@ interface AuthGateProps {
   lang: Language;
   theme: ThemeMode;
   christmasTheme: boolean;
+  musicPlaying: boolean;
   familyName: string;
   heroTitle: string;
   authWelcomeTitle: string;
@@ -29,6 +44,7 @@ interface AuthGateProps {
   existingUsers: UserAccount[];
   onToggleLang: () => void;
   onToggleTheme: () => void;
+  onToggleMusic: () => void;
   onOpenAdmin: () => void;
   onRegister: (fullName: string, pin: string) => Promise<{ ok: boolean; error?: string }>;
   onLogin: (fullName: string, pin: string) => Promise<{ ok: boolean; error?: string }>;
@@ -38,6 +54,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({
   lang,
   theme,
   christmasTheme,
+  musicPlaying,
   familyName,
   heroTitle,
   authWelcomeTitle,
@@ -49,6 +66,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({
   existingUsers,
   onToggleLang,
   onToggleTheme,
+  onToggleMusic,
   onOpenAdmin,
   onRegister,
   onLogin,
@@ -125,20 +143,53 @@ export const AuthGate: React.FC<AuthGateProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={onToggleMusic}
+            aria-pressed={musicPlaying}
+            aria-label={
+              musicPlaying
+                ? lang === 'ar'
+                  ? 'إيقاف الموسيقى الهادئة'
+                  : 'Pause calm music'
+                : lang === 'ar'
+                ? 'تشغيل الموسيقى الهادئة'
+                : 'Play calm music'
+            }
+            title={
+              musicPlaying
+                ? lang === 'ar'
+                  ? 'إيقاف الموسيقى الهادئة'
+                  : 'Pause calm music'
+                : lang === 'ar'
+                ? 'تشغيل موسيقى هادئة'
+                : 'Play calm music'
+            }
+            className={`min-h-[34px] min-w-[34px] px-2 py-1 app-control border text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors ${
+              musicPlaying
+                ? 'border-[var(--accent)]/50 bg-[var(--accent-soft)] text-[var(--accent)]'
+                : 'border-stone-200 dark:border-white/15 bg-white/80 dark:bg-white/5 hover:bg-stone-100 dark:hover:bg-white/10 text-stone-700 dark:text-stone-200'
+            }`}
+          >
+            {musicPlaying ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">{lang === 'ar' ? 'موسيقى' : 'Music'}</span>
+          </button>
           <button
             type="button"
             onClick={onToggleLang}
-            className="min-h-[38px] px-3 py-1.5 app-control border border-stone-200 dark:border-white/15 bg-white/80 dark:bg-white/5 hover:bg-stone-100 dark:hover:bg-white/10 text-xs font-semibold text-stone-700 dark:text-stone-200 flex items-center gap-1.5 cursor-pointer"
+            aria-label={lang === 'ar' ? 'Switch to English' : 'التبديل للعربية'}
+            title={lang === 'ar' ? 'Switch to English' : 'التبديل للعربية'}
+            className="min-h-[32px] px-2 py-1 app-control border border-stone-200 dark:border-white/15 bg-white/80 dark:bg-white/5 hover:bg-stone-100 dark:hover:bg-white/10 text-[11px] font-bold text-stone-700 dark:text-stone-200 flex items-center gap-1 cursor-pointer"
           >
-            <Globe className="w-3.5 h-3.5 text-[var(--accent)]" />
-            <span>{lang === 'ar' ? 'English' : 'العربية'}</span>
+            <Globe className="w-3 h-3 text-[var(--accent)]" />
+            <span>{lang === 'ar' ? 'EN' : 'ع'}</span>
           </button>
           <button
             type="button"
             onClick={onToggleTheme}
             aria-label={lang === 'ar' ? 'تبديل المظهر' : 'Toggle theme'}
-            className="min-w-[38px] min-h-[38px] app-control border border-stone-200 dark:border-white/15 bg-white/80 dark:bg-white/5 hover:bg-stone-100 dark:hover:bg-white/10 text-stone-700 dark:text-stone-200 flex items-center justify-center cursor-pointer"
+            className="min-w-[34px] min-h-[34px] app-control border border-stone-200 dark:border-white/15 bg-white/80 dark:bg-white/5 hover:bg-stone-100 dark:hover:bg-white/10 text-stone-700 dark:text-stone-200 flex items-center justify-center cursor-pointer"
           >
             {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
@@ -147,7 +198,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({
             onClick={onOpenAdmin}
             title={lang === 'ar' ? 'إعدادات المطورين' : 'Developer Settings'}
             aria-label={lang === 'ar' ? 'إعدادات المطورين' : 'Developer Settings'}
-            className="min-w-[38px] min-h-[38px] app-control border border-stone-200 dark:border-white/15 bg-white/80 dark:bg-white/5 hover:bg-stone-100 dark:hover:bg-white/10 text-stone-700 dark:text-stone-200 flex items-center justify-center cursor-pointer"
+            className="min-w-[34px] min-h-[34px] app-control border border-stone-200 dark:border-white/15 bg-white/80 dark:bg-white/5 hover:bg-stone-100 dark:hover:bg-white/10 text-stone-700 dark:text-stone-200 flex items-center justify-center cursor-pointer"
           >
             <Settings className="w-4 h-4" />
           </button>

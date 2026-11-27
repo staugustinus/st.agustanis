@@ -12,6 +12,7 @@ import {
   doc,
   getDoc,
   getDocFromServer,
+  getDocs,
   getFirestore,
   onSnapshot,
   setDoc,
@@ -22,6 +23,7 @@ import firebaseConfig from '../firebase-applet-config.json';
 import {
   buildReadingPlan,
   DEFAULT_COMPETITION_END_DATE,
+  getChapterKey,
   getDayPlan,
   getDaysBetweenInclusive,
   getTodayDateString,
@@ -247,11 +249,19 @@ function computeParticipantProgressFields(
   const completedSet = new Set(
     (user.completedDays || []).filter((d) => d >= 1 && d <= totalDays)
   );
-  let completedChapters = 0;
+  const completedChapterKeys = new Set<string>();
   for (const d of completedSet) {
-    completedChapters += getDayPlan(d, plan).readings.length;
+    for (const ref of getDayPlan(d, plan).readings) {
+      completedChapterKeys.add(getChapterKey(ref.book, ref.chapter));
+    }
   }
-  const completedChaptersClamped = Math.min(TOTAL_GOSPEL_CHAPTERS, Math.max(0, completedChapters));
+  for (const [k, passed] of Object.entries(user.passedChapters || {})) {
+    if (passed) completedChapterKeys.add(k);
+  }
+  const completedChaptersClamped = Math.min(
+    TOTAL_GOSPEL_CHAPTERS,
+    Math.max(0, completedChapterKeys.size)
+  );
   const percent = Math.min(
     100,
     Math.max(0, Math.round((completedChaptersClamped / TOTAL_GOSPEL_CHAPTERS) * 100))
@@ -421,6 +431,38 @@ export async function syncParticipantProgressToCloud(
   }
 }
 
+function mapParticipantDoc(id: string, data: Record<string, unknown>): UserAccount {
+  const fullName = String(data.fullName || '');
+  return {
+    id: normalizeNameKey(fullName) || id,
+    cloudId: id,
+    fullName,
+    pin: '',
+    pinHash: typeof data.pinHash === 'string' ? data.pinHash : undefined,
+    currentDay: typeof data.currentDay === 'number' ? data.currentDay : 1,
+    completedDays: Array.isArray(data.completedDays)
+      ? (data.completedDays as number[])
+      : [],
+    passedChapters:
+      data.passedChapters && typeof data.passedChapters === 'object'
+        ? (data.passedChapters as Record<string, boolean>)
+        : {},
+    checkedPractices:
+      data.checkedPractices && typeof data.checkedPractices === 'object'
+        ? (data.checkedPractices as Record<string, boolean>)
+        : {},
+    readerFontSize:
+      typeof data.readerFontSize === 'number' ? data.readerFontSize : 21,
+    planStartDate:
+      typeof data.planStartDate === 'string' ? data.planStartDate : undefined,
+    createdAt:
+      typeof data.createdAt === 'string'
+        ? data.createdAt
+        : new Date().toISOString(),
+    updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : undefined,
+  };
+}
+
 export function subscribeAllParticipants(
   onUsers: (users: UserAccount[]) => void
 ): Unsubscribe {
@@ -428,42 +470,29 @@ export function subscribeAllParticipants(
   return onSnapshot(
     colRef,
     (snapshot) => {
-      const list: UserAccount[] = snapshot.docs.map((d) => {
-        const data = d.data() as Record<string, unknown>;
-        const fullName = String(data.fullName || '');
-        return {
-          id: normalizeNameKey(fullName) || d.id,
-          cloudId: d.id,
-          fullName,
-          pin: '',
-          pinHash: typeof data.pinHash === 'string' ? data.pinHash : undefined,
-          currentDay: typeof data.currentDay === 'number' ? data.currentDay : 1,
-          completedDays: Array.isArray(data.completedDays)
-            ? (data.completedDays as number[])
-            : [],
-          passedChapters:
-            data.passedChapters && typeof data.passedChapters === 'object'
-              ? (data.passedChapters as Record<string, boolean>)
-              : {},
-          checkedPractices:
-            data.checkedPractices && typeof data.checkedPractices === 'object'
-              ? (data.checkedPractices as Record<string, boolean>)
-              : {},
-          readerFontSize:
-            typeof data.readerFontSize === 'number' ? data.readerFontSize : 21,
-          planStartDate:
-            typeof data.planStartDate === 'string' ? data.planStartDate : undefined,
-          createdAt:
-            typeof data.createdAt === 'string'
-              ? data.createdAt
-              : new Date().toISOString(),
-          updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : undefined,
-        };
-      });
+      const list: UserAccount[] = snapshot.docs.map((d) =>
+        mapParticipantDoc(d.id, d.data() as Record<string, unknown>)
+      );
       onUsers(list);
     },
     (error) => {
       handleFirestoreError(error, OperationType.LIST, 'participants');
     }
   );
+}
+
+export async function fetchAllParticipantsOnce(): Promise<{
+  ok: boolean;
+  users: UserAccount[];
+}> {
+  try {
+    const snapshot = await getDocs(collection(db, 'participants'));
+    const list: UserAccount[] = snapshot.docs.map((d) =>
+      mapParticipantDoc(d.id, d.data() as Record<string, unknown>)
+    );
+    return { ok: true, users: list };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'participants');
+    return { ok: false, users: [] };
+  }
 }

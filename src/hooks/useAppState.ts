@@ -18,6 +18,7 @@ import {
 } from '../data/readingPlan';
 import {
   createParticipantInCloud,
+  fetchAllParticipantsOnce,
   getParticipantDocId,
   hashParticipantPin,
   isVerifiedAdminUser,
@@ -241,6 +242,15 @@ export function useAppState() {
     return subscribeAllParticipants((usersList) => {
       setCloudUsers(usersList);
     });
+  }, [isAdminVerified]);
+
+  const refreshCloudUsers = useCallback(async (): Promise<boolean> => {
+    if (!isAdminVerified) return false;
+    const res = await fetchAllParticipantsOnce();
+    if (res.ok) {
+      setCloudUsers(res.users);
+    }
+    return res.ok;
   }, [isAdminVerified]);
 
   // Fallback static public/config.json sync when newer
@@ -820,10 +830,16 @@ export function useAppState() {
 
   const stats = useMemo(() => {
     const completedSet = new Set(completedDays.filter((d) => d >= 1 && d <= totalDays));
-    let completedChapters = 0;
+    const completedChapterKeys = new Set<string>();
     for (const d of completedSet) {
-      completedChapters += getDayPlan(d, readingPlan).readings.length;
+      for (const ref of getDayPlan(d, readingPlan).readings) {
+        completedChapterKeys.add(getChapterKey(ref.book, ref.chapter));
+      }
     }
+    for (const [k, passed] of Object.entries(passedChapters)) {
+      if (passed) completedChapterKeys.add(k);
+    }
+    const completedChapters = Math.min(TOTAL_GOSPEL_CHAPTERS, completedChapterKeys.size);
     const percent = Math.round((completedChapters / TOTAL_GOSPEL_CHAPTERS) * 100);
 
     const sorted = [...completedSet].sort((a, b) => a - b);
@@ -847,7 +863,7 @@ export function useAppState() {
       percent,
       streak: currentStreak,
     };
-  }, [completedDays, currentDay, totalDays, readingPlan]);
+  }, [completedDays, passedChapters, currentDay, totalDays, readingPlan]);
 
   return {
     state,
@@ -885,5 +901,6 @@ export function useAppState() {
     importConfig,
     resetConfigToDefaults,
     jumpToToday,
+    refreshCloudUsers,
   };
 }
