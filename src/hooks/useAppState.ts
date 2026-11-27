@@ -17,21 +17,35 @@ import {
   TOTAL_GOSPEL_CHAPTERS,
 } from '../data/readingPlan';
 import {
+  backfillParticipantsSummaryInCloud,
   createParticipantInCloud,
   fetchAllParticipantsOnce,
+  fetchParticipantsSummaryOnce,
   getParticipantDocId,
   hashParticipantPin,
   isVerifiedAdminUser,
   lookupParticipantInCloud,
+  promoteParticipantRoleInCloud,
   publishAppConfigToCloud,
+  publishServantContentToCloud,
   signInDeveloperWithGoogle,
   signOutDeveloperGoogle,
   subscribeAdminAuth,
   subscribeAllParticipants,
   subscribeAppConfig,
+  subscribeParticipantSelf,
+  subscribeParticipantsSummary,
   syncParticipantProgressToCloud,
 } from '../firebase';
-import type { AppConfig, AppState, GospelKey, Language, ThemeMode, UserAccount } from '../types';
+import type {
+  AppConfig,
+  AppState,
+  GospelKey,
+  Language,
+  ParticipantRole,
+  ThemeMode,
+  UserAccount,
+} from '../types';
 import { isValidTripleName, normalizeDigits, normalizeNameKey } from '../utils/digits';
 
 const STORAGE_KEY = 'yalla_negahaz_state_v2';
@@ -91,6 +105,24 @@ function mergeConfig(
       Array.isArray(incoming.practices) && incoming.practices.length > 0
         ? incoming.practices
         : base.practices,
+    competition: incoming.competition
+      ? {
+          ...(base.competition || {
+            enabled: false,
+            titleAr: 'مسابقة صوم الميلاد',
+            titleEn: 'Nativity Fast Competition',
+            descriptionAr: '',
+            descriptionEn: '',
+            rewardAr: '',
+            rewardEn: '',
+            questions: [],
+          }),
+          ...incoming.competition,
+          questions: Array.isArray(incoming.competition.questions)
+            ? incoming.competition.questions
+            : base.competition?.questions || [],
+        }
+      : base.competition,
   };
 }
 
@@ -184,6 +216,7 @@ export function useAppState() {
   const [state, setState] = useState<AppState>(createInitialState);
   const [adminUser, setAdminUser] = useState<FirebaseUser | null>(null);
   const [cloudUsers, setCloudUsers] = useState<UserAccount[]>([]);
+  const [summaryUsers, setSummaryUsers] = useState<UserAccount[]>([]);
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -244,14 +277,77 @@ export function useAppState() {
     });
   }, [isAdminVerified]);
 
-  const refreshCloudUsers = useCallback(async (): Promise<boolean> => {
-    if (!isAdminVerified) return false;
-    const res = await fetchAllParticipantsOnce();
-    if (res.ok) {
-      setCloudUsers(res.users);
+  // Backfill shared non-PII summary map whenever Admin receives cloud users so Servants can read progress
+  useEffect(() => {
+    if (!isAdminVerified || cloudUsers.length === 0) return;
+    void backfillParticipantsSummaryInCloud(cloudUsers, stateRef.current.config);
+  }, [isAdminVerified, cloudUsers]);
+
+  const activeUser: UserAccount | null = useMemo(() => {
+    if (!state.activeUserId) return null;
+    return state.users[state.activeUserId] || null;
+  }, [state.activeUserId, state.users]);
+
+  const isServant = activeUser?.role === 'servant';
+  const canViewAllUsers = isAdminVerified || isServant;
+
+  // Listen to live role updates for the currently signed-in participant
+  useEffect(() => {
+    const cloudId = activeUser?.cloudId;
+    const userId = activeUser?.id;
+    if (!cloudId || !userId) return;
+    return subscribeParticipantSelf(cloudId, ({ role }) => {
+      setState((prev) => {
+        const current = prev.users[userId];
+        if (!current || (current.role || 'member') === role) return prev;
+        return {
+          ...prev,
+          users: {
+            ...prev.users,
+            [userId]: {
+              ...current,
+              role,
+            },
+          },
+        };
+      });
+    });
+  }, [activeUser?.cloudId, activeUser?.id]);
+
+  // Listen to shared progress summary for Servants (and Admin)
+  useEffect(() => {
+    if (!canViewAllUsers) {
+      setSummaryUsers([]);
+      return;
     }
-    return res.ok;
-  }, [isAdminVerified]);
+    return subscribeParticipantsSummary((usersList) => {
+      setSummaryUsers(usersList);
+    });
+  }, [canViewAllUsers]);
+
+  const refreshCloudUsers = useCallback(async (): Promise<boolean> => {
+    if (isAdminVerified) {
+      const [allRes, sumRes] = await Promise.all([
+        fetchAllParticipantsOnce(),
+        fetchParticipantsSummaryOnce(),
+      ]);
+      if (allRes.ok) {
+        setCloudUsers(allRes.users);
+      }
+      if (sumRes.ok) {
+        setSummaryUsers(sumRes.users);
+      }
+      return allRes.ok;
+    }
+    if (isServant) {
+      const sumRes = await fetchParticipantsSummaryOnce();
+      if (sumRes.ok) {
+        setSummaryUsers(sumRes.users);
+      }
+      return sumRes.ok;
+    }
+    return false;
+  }, [isAdminVerified, isServant]);
 
   // Fallback static public/config.json sync when newer
   useEffect(() => {
@@ -329,11 +425,6 @@ export function useAppState() {
       metaTheme.setAttribute('content', state.theme === 'dark' ? darkCanvasColor : lightCanvasColor);
     }
   }, [state.lang, state.theme, state.config]);
-
-  const activeUser: UserAccount | null = useMemo(() => {
-    if (!state.activeUserId) return null;
-    return state.users[state.activeUserId] || null;
-  }, [state.activeUserId, state.users]);
 
   // Ensure active participant always syncs back up to Firestore (including legacy local-only users)
   useEffect(() => {
@@ -449,10 +540,12 @@ export function useAppState() {
         fullName: rawName.trim().replace(/\s+/g, ' '),
         pin: cleanPin,
         pinHash,
+        role: 'member',
         currentDay: 1,
         completedDays: [],
         passedChapters: {},
         checkedPractices: {},
+        competitionAnswers: {},
         readerFontSize: 21,
         planStartDate: effectiveStart,
         createdAt: nowIso,
@@ -503,6 +596,7 @@ export function useAppState() {
           fullName: cloudLookup.data.fullName || localExisting?.fullName || rawName.trim(),
           pin: cleanPin,
           pinHash,
+          role: cloudLookup.data.role || localExisting?.role || 'member',
           currentDay: useLocalProgress ? localExisting!.currentDay : cloudLookup.data.currentDay || 1,
           completedDays: useLocalProgress
             ? localExisting!.completedDays
@@ -513,6 +607,9 @@ export function useAppState() {
           checkedPractices: useLocalProgress
             ? localExisting!.checkedPractices || {}
             : cloudLookup.data.checkedPractices || {},
+          competitionAnswers: useLocalProgress
+            ? localExisting!.competitionAnswers || {}
+            : cloudLookup.data.competitionAnswers || {},
           readerFontSize: useLocalProgress
             ? localExisting!.readerFontSize || 21
             : cloudLookup.data.readerFontSize || 21,
@@ -724,6 +821,19 @@ export function useAppState() {
     [updateActiveUser]
   );
 
+  const answerCompetitionQuestion = useCallback(
+    (questionId: string, optionIndex: number) => {
+      updateActiveUser((u) => ({
+        ...u,
+        competitionAnswers: {
+          ...(u.competitionAnswers || {}),
+          [questionId]: optionIndex,
+        },
+      }));
+    },
+    [updateActiveUser]
+  );
+
   const setReaderFontSize = useCallback(
     (size: number) => {
       const clamped = Math.max(16, Math.min(30, size));
@@ -809,11 +919,107 @@ export function useAppState() {
     }
   }, [isAdminVerified]);
 
-  // Merge cloudUsers (all devices) + local state.users so Developer always sees everyone
+  const saveServantContent = useCallback(
+    async (
+      nextConfig: AppConfig
+    ): Promise<{ ok: boolean; syncedToCloud: boolean; error?: string }> => {
+      const servantDocId = activeUser?.cloudId;
+      const now = Date.now();
+      const updatedCfg: AppConfig = {
+        ...stateRef.current.config,
+        quotes: nextConfig.quotes,
+        practices: nextConfig.practices,
+        competition: nextConfig.competition,
+        lentStartDate: nextConfig.lentStartDate,
+        lentEndDate: nextConfig.lentEndDate,
+        updatedAt: now,
+      };
+      setState((prev) => ({
+        ...prev,
+        config: updatedCfg,
+      }));
+
+      if (isAdminVerified) {
+        const adminRes = await publishAppConfigToCloud(updatedCfg);
+        return { ok: true, syncedToCloud: adminRes.ok, error: adminRes.error };
+      }
+
+      if (!servantDocId || activeUser?.role !== 'servant') {
+        return { ok: false, syncedToCloud: false, error: 'not-servant' };
+      }
+
+      const cloudRes = await publishServantContentToCloud(servantDocId, updatedCfg);
+      if (cloudRes.ok && cloudRes.updatedAt) {
+        setState((prev) => ({
+          ...prev,
+          config: {
+            ...prev.config,
+            updatedAt: cloudRes.updatedAt,
+          },
+        }));
+      }
+      return {
+        ok: true,
+        syncedToCloud: cloudRes.ok,
+        error: cloudRes.error,
+      };
+    },
+    [activeUser?.cloudId, activeUser?.role, isAdminVerified]
+  );
+
+  const promoteParticipantRole = useCallback(
+    async (
+      user: UserAccount,
+      nextRole: ParticipantRole
+    ): Promise<{ ok: boolean; error?: string }> => {
+      const res = await promoteParticipantRoleInCloud(
+        user,
+        nextRole,
+        stateRef.current.config
+      );
+      if (!res.ok) return res;
+
+      const now = Date.now();
+      setState((prev) => {
+        if (!prev.users[user.id]) return prev;
+        return {
+          ...prev,
+          users: {
+            ...prev.users,
+            [user.id]: {
+              ...prev.users[user.id],
+              role: nextRole,
+              updatedAt: now,
+            },
+          },
+        };
+      });
+      setCloudUsers((prev) =>
+        prev.map((u) => (u.id === user.id ? { ...u, role: nextRole, updatedAt: now } : u))
+      );
+      setSummaryUsers((prev) =>
+        prev.map((u) => (u.id === user.id ? { ...u, role: nextRole, updatedAt: now } : u))
+      );
+      return { ok: true };
+    },
+    []
+  );
+
+  // Merge local state.users + summaryUsers + cloudUsers (all devices)
   const allKnownUsers: UserAccount[] = useMemo(() => {
     const mergedMap = new Map<string, UserAccount>();
     for (const u of Object.values(state.users)) {
       mergedMap.set(u.id, u);
+    }
+    for (const su of summaryUsers) {
+      const localMatch = mergedMap.get(su.id);
+      if (!localMatch || (su.updatedAt || 0) >= (localMatch.updatedAt || 0)) {
+        mergedMap.set(su.id, {
+          ...localMatch,
+          ...su,
+          pin: localMatch?.pin || '',
+        });
+      }
     }
     for (const cu of cloudUsers) {
       const localMatch = mergedMap.get(cu.id);
@@ -826,7 +1032,7 @@ export function useAppState() {
       }
     }
     return Array.from(mergedMap.values());
-  }, [state.users, cloudUsers]);
+  }, [state.users, summaryUsers, cloudUsers]);
 
   const stats = useMemo(() => {
     const completedSet = new Set(completedDays.filter((d) => d >= 1 && d <= totalDays));
@@ -895,9 +1101,12 @@ export function useAppState() {
     isChapterUnlocked,
     toggleDayCompleted,
     togglePractice,
+    answerCompetitionQuestion,
     setReaderFontSize,
     dismissPwaBanner,
     saveConfig,
+    saveServantContent,
+    promoteParticipantRole,
     importConfig,
     resetConfigToDefaults,
     jumpToToday,

@@ -74,6 +74,10 @@
           "type": "array",
           "description": "Weekly spiritual practices list (up to 100 entries)."
         },
+        "competition": {
+          "type": "object",
+          "description": "Custom competition configuration and multiple-choice questions authored by Developer or promoted Servants."
+        },
         "updatedAt": {
           "type": "number"
         },
@@ -122,6 +126,11 @@
           "minLength": 16,
           "maxLength": 128
         },
+        "role": {
+          "type": "string",
+          "enum": ["member", "servant"],
+          "maxLength": 20
+        },
         "currentDay": {
           "type": "number"
         },
@@ -132,6 +141,9 @@
           "type": "object"
         },
         "checkedPractices": {
+          "type": "object"
+        },
+        "competitionAnswers": {
           "type": "object"
         },
         "readerFontSize": {
@@ -190,16 +202,34 @@
         }
       },
       "required": ["email", "createdAt"]
+    },
+    "ParticipantsSummary": {
+      "title": "ParticipantsSummary",
+      "description": "Non-sensitive summary map of participant progress readable by promoted Servants and Developers.",
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "object"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": ["entries", "updatedAt"]
     }
   },
   "firestore": {
     "/app_config/{configId}": {
       "schema": { "$ref": "#/entities/AppConfig" },
-      "description": "Shared live app configuration (main document) readable by all users and writable only by verified admins."
+      "description": "Shared live app configuration (main document) readable by all users and writable by verified admins or (for quotes/practices/competition) promoted servants."
     },
     "/participants/{participantId}": {
       "schema": { "$ref": "#/entities/Participant" },
       "description": "Registered participants and their reading/quiz progress, listable only by verified admins."
+    },
+    "/participants_summary/{summaryId}": {
+      "schema": { "$ref": "#/entities/ParticipantsSummary" },
+      "description": "Non-PII progress summary map (no pinHash) for promoted servants and developers."
     },
     "/admins/{uid}": {
       "schema": { "$ref": "#/entities/AdminUser" },

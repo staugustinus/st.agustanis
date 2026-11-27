@@ -29,7 +29,7 @@ import {
   getTodayDateString,
   TOTAL_GOSPEL_CHAPTERS,
 } from './data/readingPlan';
-import type { AppConfig, UserAccount } from './types';
+import type { AppConfig, CompetitionConfig, ParticipantRole, UserAccount } from './types';
 import { normalizeNameKey } from './utils/digits';
 
 export const ADMIN_EMAIL = 'thomasgawdat3@gmail.com';
@@ -192,6 +192,30 @@ export function subscribeAppConfig(
   );
 }
 
+function sanitizeCompetition(comp?: CompetitionConfig): CompetitionConfig {
+  return {
+    enabled: Boolean(comp?.enabled),
+    titleAr: String(comp?.titleAr || 'مسابقة صوم الميلاد').slice(0, 160),
+    titleEn: String(comp?.titleEn || 'Nativity Fast Competition').slice(0, 160),
+    descriptionAr: String(
+      comp?.descriptionAr || 'أجب عن أسئلة المسابقة التي يضعها خدام الأسرة.'
+    ).slice(0, 600),
+    descriptionEn: String(
+      comp?.descriptionEn || 'Answer the fellowship competition questions prepared by the servants.'
+    ).slice(0, 600),
+    rewardAr: String(comp?.rewardAr || '').slice(0, 200),
+    rewardEn: String(comp?.rewardEn || '').slice(0, 200),
+    questions: (comp?.questions || []).slice(0, 60).map((q, idx) => ({
+      id: String(q.id || `q_${idx + 1}`).slice(0, 64),
+      questionAr: String(q.questionAr || '').slice(0, 300),
+      questionEn: String(q.questionEn || '').slice(0, 300),
+      optionsAr: (q.optionsAr || []).slice(0, 5).map((o) => String(o || '').slice(0, 160)),
+      optionsEn: (q.optionsEn || []).slice(0, 5).map((o) => String(o || '').slice(0, 160)),
+      correctIndex: Math.max(0, Math.min(4, Number(q.correctIndex) || 0)),
+    })),
+  };
+}
+
 export async function publishAppConfigToCloud(
   config: AppConfig
 ): Promise<{ ok: boolean; updatedAt?: number; error?: string }> {
@@ -225,6 +249,7 @@ export async function publishAppConfigToCloud(
     copy: config.copy,
     quotes: (config.quotes || []).slice(0, 60),
     practices: (config.practices || []).slice(0, 100),
+    competition: sanitizeCompetition(config.competition),
     updatedAt: now,
     updatedBy: currentUser!.uid,
   };
@@ -234,6 +259,38 @@ export async function publishAppConfigToCloud(
     return { ok: true, updatedAt: now };
   } catch (err) {
     const info = handleFirestoreError(err, OperationType.WRITE, 'app_config/main');
+    return { ok: false, error: info.error };
+  }
+}
+
+export async function publishServantContentToCloud(
+  servantDocId: string,
+  config: AppConfig
+): Promise<{ ok: boolean; updatedAt?: number; error?: string }> {
+  if (!servantDocId) {
+    return { ok: false, error: 'missing-servant-id' };
+  }
+  const now = Date.now();
+  const ref = doc(db, 'app_config', 'main');
+  const patch = {
+    quotes: (config.quotes || []).slice(0, 60),
+    practices: (config.practices || []).slice(0, 100),
+    competition: sanitizeCompetition(config.competition),
+    lentStartDate: (config.lentStartDate || getTodayDateString()).slice(0, 20),
+    lentEndDate: (config.lentEndDate || DEFAULT_COMPETITION_END_DATE).slice(0, 20),
+    updatedAt: now,
+    updatedBy: servantDocId.slice(0, 128),
+  };
+
+  try {
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      return { ok: false, error: 'config-not-initialized' };
+    }
+    await updateDoc(ref, patch);
+    return { ok: true, updatedAt: now };
+  } catch (err) {
+    const info = handleFirestoreError(err, OperationType.UPDATE, 'app_config/main');
     return { ok: false, error: info.error };
   }
 }
@@ -298,10 +355,12 @@ export async function lookupParticipantInCloud(
     id: string;
     fullName: string;
     pinHash: string;
+    role?: ParticipantRole;
     currentDay: number;
     completedDays: number[];
     passedChapters: Record<string, boolean>;
     checkedPractices: Record<string, boolean>;
+    competitionAnswers?: Record<string, number>;
     readerFontSize: number;
     planStartDate: string;
     createdAt: string;
@@ -321,10 +380,12 @@ export async function lookupParticipantInCloud(
         id: string;
         fullName: string;
         pinHash: string;
+        role?: ParticipantRole;
         currentDay: number;
         completedDays: number[];
         passedChapters: Record<string, boolean>;
         checkedPractices: Record<string, boolean>;
+        competitionAnswers?: Record<string, number>;
         readerFontSize: number;
         planStartDate: string;
         createdAt: string;
@@ -334,6 +395,92 @@ export async function lookupParticipantInCloud(
   } catch (err) {
     handleFirestoreError(err, OperationType.GET, `participants/${docId}`);
     return { exists: false, offlineOrError: true, docId };
+  }
+}
+
+function buildSummaryEntry(user: UserAccount, docId: string, config: AppConfig) {
+  const metrics = computeParticipantProgressFields(user, config);
+  return {
+    id: docId,
+    fullName: user.fullName.slice(0, 120),
+    role: user.role === 'servant' ? 'servant' : 'member',
+    currentDay: Math.max(1, Math.min(200, user.currentDay || 1)),
+    completedDays: (user.completedDays || [])
+      .filter((d) => typeof d === 'number' && Number.isFinite(d))
+      .slice(0, 200),
+    passedChapters: user.passedChapters || {},
+    checkedPractices: user.checkedPractices || {},
+    competitionAnswers: user.competitionAnswers || {},
+    planStartDate: (user.planStartDate || getTodayDateString()).slice(0, 20),
+    completedChapters: metrics.completedChapters,
+    percent: metrics.percent,
+    streak: metrics.streak,
+    createdAt: (user.createdAt || new Date().toISOString()).slice(0, 40),
+    updatedAt: user.updatedAt || Date.now(),
+  };
+}
+
+export async function upsertParticipantSummaryInCloud(
+  user: UserAccount,
+  config: AppConfig
+): Promise<void> {
+  const nameKey = normalizeNameKey(user.fullName);
+  const docId = user.cloudId || (await getParticipantDocId(nameKey));
+  const summaryRef = doc(db, 'participants_summary', 'main');
+  const entry = buildSummaryEntry(user, docId, config);
+  const now = Date.now();
+  try {
+    const snap = await getDoc(summaryRef);
+    if (!snap.exists()) {
+      await setDoc(summaryRef, {
+        entries: { [docId]: entry },
+        updatedAt: now,
+      });
+    } else {
+      await updateDoc(summaryRef, {
+        [`entries.${docId}`]: entry,
+        updatedAt: now,
+      });
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, 'participants_summary/main');
+  }
+}
+
+export async function backfillParticipantsSummaryInCloud(
+  users: UserAccount[],
+  config: AppConfig
+): Promise<void> {
+  if (users.length === 0) return;
+  const summaryRef = doc(db, 'participants_summary', 'main');
+  try {
+    const snap = await getDoc(summaryRef);
+    const existingEntries = snap.exists()
+      ? ((snap.data()?.entries as Record<string, Record<string, unknown>>) || {})
+      : {};
+    let changed = false;
+    const nextEntries: Record<string, Record<string, unknown>> = { ...existingEntries };
+
+    for (const u of users) {
+      const nameKey = normalizeNameKey(u.fullName);
+      const docId = u.cloudId || (await getParticipantDocId(nameKey));
+      const prev = existingEntries[docId];
+      const prevTs = typeof prev?.updatedAt === 'number' ? prev.updatedAt : 0;
+      const curTs = u.updatedAt || 0;
+      if (!prev || curTs > prevTs || prev.role !== (u.role || 'member')) {
+        nextEntries[docId] = buildSummaryEntry(u, docId, config);
+        changed = true;
+      }
+    }
+
+    if (changed || !snap.exists()) {
+      await setDoc(summaryRef, {
+        entries: nextEntries,
+        updatedAt: Date.now(),
+      });
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, 'participants_summary/main');
   }
 }
 
@@ -350,12 +497,14 @@ export async function createParticipantInCloud(
     id: docId,
     fullName: user.fullName.slice(0, 120),
     pinHash,
+    role: 'member' as const,
     currentDay: Math.max(1, Math.min(200, user.currentDay || 1)),
     completedDays: (user.completedDays || [])
       .filter((d) => typeof d === 'number' && Number.isFinite(d))
       .slice(0, 200),
     passedChapters: user.passedChapters || {},
     checkedPractices: user.checkedPractices || {},
+    competitionAnswers: user.competitionAnswers || {},
     readerFontSize: Math.max(12, Math.min(40, user.readerFontSize || 21)),
     planStartDate: (user.planStartDate || getTodayDateString()).slice(0, 20),
     completedChapters: metrics.completedChapters,
@@ -367,6 +516,7 @@ export async function createParticipantInCloud(
 
   try {
     await setDoc(doc(db, 'participants', docId), payload);
+    void upsertParticipantSummaryInCloud({ ...user, cloudId: docId, role: 'member', updatedAt: now }, config);
     return true;
   } catch (err) {
     handleFirestoreError(err, OperationType.CREATE, `participants/${docId}`);
@@ -409,6 +559,7 @@ export async function syncParticipantProgressToCloud(
         .slice(0, 200),
       passedChapters: user.passedChapters || {},
       checkedPractices: user.checkedPractices || {},
+      competitionAnswers: user.competitionAnswers || {},
       readerFontSize: Math.max(12, Math.min(40, user.readerFontSize || 21)),
       completedChapters: metrics.completedChapters,
       percent: metrics.percent,
@@ -426,9 +577,84 @@ export async function syncParticipantProgressToCloud(
     }
 
     await updateDoc(ref, updatePayload);
+    void upsertParticipantSummaryInCloud({ ...user, cloudId: docId, updatedAt: now }, config);
   } catch (err: unknown) {
     handleFirestoreError(err, OperationType.UPDATE, `participants/${docId}`);
   }
+}
+
+export async function promoteParticipantRoleInCloud(
+  user: UserAccount,
+  nextRole: ParticipantRole,
+  config: AppConfig
+): Promise<{ ok: boolean; error?: string }> {
+  const currentUser = auth.currentUser;
+  if (!isVerifiedAdminUser(currentUser)) {
+    return { ok: false, error: 'not-admin-auth' };
+  }
+  const nameKey = normalizeNameKey(user.fullName);
+  const docId = user.cloudId || (await getParticipantDocId(nameKey));
+  const ref = doc(db, 'participants', docId);
+  const now = Date.now();
+
+  try {
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      const pinHash =
+        user.pinHash || (user.pin ? await hashParticipantPin(nameKey, user.pin) : '');
+      if (!pinHash) return { ok: false, error: 'missing-pin-hash' };
+      const metrics = computeParticipantProgressFields(user, config);
+      await setDoc(ref, {
+        id: docId,
+        fullName: user.fullName.slice(0, 120),
+        pinHash,
+        role: nextRole,
+        currentDay: Math.max(1, Math.min(200, user.currentDay || 1)),
+        completedDays: (user.completedDays || []).slice(0, 200),
+        passedChapters: user.passedChapters || {},
+        checkedPractices: user.checkedPractices || {},
+        competitionAnswers: user.competitionAnswers || {},
+        readerFontSize: Math.max(12, Math.min(40, user.readerFontSize || 21)),
+        planStartDate: (user.planStartDate || getTodayDateString()).slice(0, 20),
+        completedChapters: metrics.completedChapters,
+        percent: metrics.percent,
+        streak: metrics.streak,
+        createdAt: (user.createdAt || new Date().toISOString()).slice(0, 40),
+        updatedAt: now,
+      });
+    } else {
+      await updateDoc(ref, {
+        role: nextRole,
+        updatedAt: now,
+      });
+    }
+    await upsertParticipantSummaryInCloud(
+      { ...user, cloudId: docId, role: nextRole, updatedAt: now },
+      config
+    );
+    return { ok: true };
+  } catch (err) {
+    const info = handleFirestoreError(err, OperationType.UPDATE, `participants/${docId}`);
+    return { ok: false, error: info.error };
+  }
+}
+
+export function subscribeParticipantSelf(
+  docId: string,
+  onUpdate: (patch: { role: ParticipantRole }) => void
+): Unsubscribe {
+  return onSnapshot(
+    doc(db, 'participants', docId),
+    (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data() as Record<string, unknown>;
+      const role: ParticipantRole = data.role === 'servant' ? 'servant' : 'member';
+      onUpdate({ role });
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, `participants/${docId}`);
+    }
+  );
 }
 
 function mapParticipantDoc(id: string, data: Record<string, unknown>): UserAccount {
@@ -439,6 +665,7 @@ function mapParticipantDoc(id: string, data: Record<string, unknown>): UserAccou
     fullName,
     pin: '',
     pinHash: typeof data.pinHash === 'string' ? data.pinHash : undefined,
+    role: data.role === 'servant' ? 'servant' : 'member',
     currentDay: typeof data.currentDay === 'number' ? data.currentDay : 1,
     completedDays: Array.isArray(data.completedDays)
       ? (data.completedDays as number[])
@@ -450,6 +677,10 @@ function mapParticipantDoc(id: string, data: Record<string, unknown>): UserAccou
     checkedPractices:
       data.checkedPractices && typeof data.checkedPractices === 'object'
         ? (data.checkedPractices as Record<string, boolean>)
+        : {},
+    competitionAnswers:
+      data.competitionAnswers && typeof data.competitionAnswers === 'object'
+        ? (data.competitionAnswers as Record<string, number>)
         : {},
     readerFontSize:
       typeof data.readerFontSize === 'number' ? data.readerFontSize : 21,
@@ -493,6 +724,46 @@ export async function fetchAllParticipantsOnce(): Promise<{
     return { ok: true, users: list };
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, 'participants');
+    return { ok: false, users: [] };
+  }
+}
+
+export function subscribeParticipantsSummary(
+  onUsers: (users: UserAccount[]) => void
+): Unsubscribe {
+  return onSnapshot(
+    doc(db, 'participants_summary', 'main'),
+    (snap) => {
+      if (!snap.exists()) {
+        onUsers([]);
+        return;
+      }
+      const entries = (snap.data()?.entries as Record<string, Record<string, unknown>>) || {};
+      const list = Object.entries(entries).map(([docId, entry]) =>
+        mapParticipantDoc(docId, entry)
+      );
+      onUsers(list);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, 'participants_summary/main');
+    }
+  );
+}
+
+export async function fetchParticipantsSummaryOnce(): Promise<{
+  ok: boolean;
+  users: UserAccount[];
+}> {
+  try {
+    const snap = await getDoc(doc(db, 'participants_summary', 'main'));
+    if (!snap.exists()) return { ok: true, users: [] };
+    const entries = (snap.data()?.entries as Record<string, Record<string, unknown>>) || {};
+    const list = Object.entries(entries).map(([docId, entry]) =>
+      mapParticipantDoc(docId, entry)
+    );
+    return { ok: true, users: list };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, 'participants_summary/main');
     return { ok: false, users: [] };
   }
 }

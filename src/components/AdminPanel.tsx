@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Award,
   Check,
   ChevronDown,
   Cloud,
   CloudOff,
   Copy,
   Download,
+  ExternalLink,
   Eye,
   EyeOff,
   FileText,
@@ -23,7 +25,9 @@ import {
   Snowflake,
   Sparkles,
   Trash2,
+  Trophy,
   Upload,
+  UserCheck,
   Users,
   X,
 } from 'lucide-react';
@@ -44,15 +48,19 @@ import {
 import type {
   AppConfig,
   CardStylePreset,
+  CompetitionConfig,
+  CompetitionQuestion,
   CopyFields,
   HeroIconKey,
   HeroIconSize,
   Language,
+  ParticipantRole,
   ProgressStyle,
   RadiusPreset,
   ThemeMode,
   UserAccount,
 } from '../types';
+import firebaseConfig from '../../firebase-applet-config.json';
 import { normalizeDigits } from '../utils/digits';
 import { HeroSymbol } from './HeroSymbol';
 
@@ -72,6 +80,10 @@ interface AdminPanelProps {
   }>;
   onGoogleSignOut: () => Promise<void>;
   onRefreshUsers?: () => Promise<boolean>;
+  onPromoteUser?: (
+    user: UserAccount,
+    nextRole: ParticipantRole
+  ) => Promise<{ ok: boolean; error?: string }>;
   onClose: () => void;
   onSaveConfig: (
     nextConfig: AppConfig
@@ -142,6 +154,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onGoogleSignIn,
   onGoogleSignOut,
   onRefreshUsers,
+  onPromoteUser,
   onClose,
   onSaveConfig,
   onImportConfig,
@@ -160,6 +173,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [saving, setSaving] = useState(false);
   const [googleAuthBusy, setGoogleAuthBusy] = useState(false);
   const [googleAuthError, setGoogleAuthError] = useState<string | null>(null);
+  const [unauthorizedDomain, setUnauthorizedDomain] = useState<string | null>(null);
 
   const [editLang, setEditLang] = useState<Language>(lang);
   const [selectedDay, setSelectedDay] = useState(1);
@@ -169,6 +183,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [userSort, setUserSort] = useState<'progress' | 'recent' | 'name'>('progress');
   const [expandedUserIds, setExpandedUserIds] = useState<Record<string, boolean>>({});
   const [refreshingUsers, setRefreshingUsers] = useState(false);
+  const [promotingId, setPromotingId] = useState<string | null>(null);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const jsonFileInputRef = useRef<HTMLInputElement>(null);
@@ -215,14 +230,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (googleAuthBusy) return;
     setGoogleAuthBusy(true);
     setGoogleAuthError(null);
+    setUnauthorizedDomain(null);
     try {
       const res = await onGoogleSignIn();
       if (!res.ok) {
         if (res.errorCode === 'auth/unauthorized-domain') {
+          const host = window.location.hostname;
+          setUnauthorizedDomain(host);
           setGoogleAuthError(
             lang === 'ar'
-              ? `النطاق (${window.location.hostname}) غير مضاف في Firebase Authorized Domains. أضفه من لوحة Firebase > Authentication > Settings.`
-              : `Domain (${window.location.hostname}) is not in Firebase Authorized Domains.`
+              ? `النطاق (${host}) غير مضاف بعد في Firebase Authorized Domains. يجب أن يضيفه مالك المشروع مرة واحدة من لوحة Firebase > Authentication > Settings > Authorized domains.`
+              : `Domain (${host}) is not added in Firebase Authorized Domains yet. The project owner must add it once in Firebase Console > Authentication > Settings > Authorized domains.`
           );
         } else if (res.errorCode !== 'auth/popup-closed-by-user') {
           setGoogleAuthError(
@@ -417,6 +435,96 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       ...prev,
       practices: prev.practices.filter((p) => p.id !== id),
     }));
+  };
+
+  const defaultComp: CompetitionConfig = {
+    enabled: false,
+    titleAr: 'مسابقة صوم الميلاد',
+    titleEn: 'Nativity Fast Competition',
+    descriptionAr: 'أجب عن أسئلة المسابقة التي يضعها خدام الأسرة.',
+    descriptionEn: 'Answer the fellowship competition questions prepared by the servants.',
+    rewardAr: '',
+    rewardEn: '',
+    questions: [],
+  };
+  const draftCompetition: CompetitionConfig = draft.competition || defaultComp;
+
+  const updateDraftCompetition = (patch: Partial<CompetitionConfig>) => {
+    updateDraft((prev) => ({
+      ...prev,
+      competition: {
+        ...(prev.competition || defaultComp),
+        ...patch,
+      },
+    }));
+  };
+
+  const addDraftCompetitionQuestion = () => {
+    const newQ: CompetitionQuestion = {
+      id: `comp_${Date.now()}`,
+      questionAr: '',
+      questionEn: '',
+      optionsAr: ['', '', '', ''],
+      optionsEn: ['', '', '', ''],
+      correctIndex: 0,
+    };
+    updateDraftCompetition({
+      enabled: true,
+      questions: [...draftCompetition.questions, newQ],
+    });
+  };
+
+  const updateDraftCompetitionQuestion = (
+    id: string,
+    patch: Partial<CompetitionQuestion>
+  ) => {
+    updateDraftCompetition({
+      questions: draftCompetition.questions.map((q) =>
+        q.id === id ? { ...q, ...patch } : q
+      ),
+    });
+  };
+
+  const deleteDraftCompetitionQuestion = (id: string) => {
+    updateDraftCompetition({
+      questions: draftCompetition.questions.filter((q) => q.id !== id),
+    });
+  };
+
+  const handleToggleRole = async (user: UserAccount) => {
+    if (!onPromoteUser) return;
+    if (!isAdminVerified) {
+      onNotify(
+        lang === 'ar'
+          ? 'اربط حساب المطور بجوجل أولاً للتمكّن من ترقية الرتب'
+          : 'Connect Developer Google account first to promote roles'
+      );
+      return;
+    }
+    const nextRole: ParticipantRole = user.role === 'servant' ? 'member' : 'servant';
+    setPromotingId(user.id);
+    try {
+      const res = await onPromoteUser(user, nextRole);
+      if (res.ok) {
+        onNotify(
+          nextRole === 'servant'
+            ? lang === 'ar'
+              ? `تمت ترقية ${user.fullName} إلى رتبة خادم`
+              : `${user.fullName} promoted to Servant`
+            : lang === 'ar'
+            ? `تمت إعادة ${user.fullName} إلى رتبة مشارك`
+            : `${user.fullName} changed back to Member`
+        );
+      } else {
+        onNotify(
+          lang === 'ar'
+            ? 'تعذّر تحديث الرتبة، تأكد من صلاحية حساب جوجل'
+            : 'Could not update role'
+        );
+      }
+    } finally {
+      setPromotingId(null);
+    }
   };
 
   const tabs: { key: AdminTab; labelAr: string; labelEn: string; icon: React.ReactNode }[] = [
@@ -721,9 +829,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               )}
 
               {googleAuthError && (
-                <p className="w-full text-[11px] font-semibold text-red-600 dark:text-red-400">
-                  {googleAuthError}
-                </p>
+                <div className="w-full space-y-2 pt-1">
+                  <p className="text-[11px] font-semibold text-red-600 dark:text-red-400">
+                    {googleAuthError}
+                  </p>
+                  {unauthorizedDomain && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(unauthorizedDomain);
+                            onNotify(
+                              lang === 'ar'
+                                ? `تم نسخ النطاق (${unauthorizedDomain})`
+                                : `Copied domain (${unauthorizedDomain})`
+                            );
+                          } catch {
+                            // ignore clipboard error
+                          }
+                        }}
+                        className="min-h-[30px] px-2.5 py-1 app-control border border-red-300 dark:border-red-500/40 bg-white dark:bg-black/25 text-[11px] font-bold text-red-700 dark:text-red-300 flex items-center gap-1 cursor-pointer"
+                      >
+                        <Copy className="w-3 h-3" />
+                        <span>
+                          {lang === 'ar'
+                            ? `نسخ (${unauthorizedDomain})`
+                            : `Copy (${unauthorizedDomain})`}
+                        </span>
+                      </button>
+                      <a
+                        href={`https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/settings`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="min-h-[30px] px-2.5 py-1 app-control bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold inline-flex items-center gap-1"
+                      >
+                        <span>
+                          {lang === 'ar' ? 'فتح إعدادات Firebase' : 'Open Firebase Settings'}
+                        </span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
@@ -1066,6 +1214,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         const rowKey = row.user.cloudId || row.user.id;
                         const isActive = row.user.id === activeUserId;
                         const isDetailOpen = Boolean(expandedUserIds[rowKey]);
+                        const isRowServant = row.user.role === 'servant';
+                        const isPromotingThis = promotingId === row.user.id;
                         const lastUpdatedLabel = row.user.updatedAt
                           ? new Intl.DateTimeFormat(lang === 'ar' ? 'ar-EG' : 'en-US', {
                               day: 'numeric',
@@ -1090,6 +1240,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                   <span className="text-sm sm:text-base font-bold text-stone-900 dark:text-white">
                                     {row.user.fullName}
                                   </span>
+                                  {isRowServant && (
+                                    <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[10px] font-bold flex items-center gap-1">
+                                      <Award className="w-3 h-3" />
+                                      <span>{lang === 'ar' ? 'خادم' : 'Servant'}</span>
+                                    </span>
+                                  )}
                                   {isActive && (
                                     <span className="px-2 py-0.5 rounded-md bg-[var(--accent)] text-white text-[10px] font-bold">
                                       {lang === 'ar' ? 'نشط الآن' : 'Active'}
@@ -1111,7 +1267,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 </div>
                               </div>
 
-                              <div className="text-end tabular-nums flex items-center gap-2">
+                              <div className="text-end tabular-nums flex flex-wrap items-center gap-1.5">
+                                {onPromoteUser && (
+                                  <button
+                                    type="button"
+                                    disabled={isPromotingThis}
+                                    onClick={() => void handleToggleRole(row.user)}
+                                    className={`min-h-[30px] px-2.5 py-1 app-control border text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50 ${
+                                      isRowServant
+                                        ? 'border-amber-400/60 bg-amber-500/15 text-amber-800 dark:text-amber-200 hover:bg-amber-500/25'
+                                        : 'border-[var(--accent)]/40 bg-[var(--accent-soft)]/60 text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white'
+                                    }`}
+                                  >
+                                    <UserCheck className="w-3.5 h-3.5" />
+                                    <span>
+                                      {isPromotingThis
+                                        ? lang === 'ar'
+                                          ? 'جارٍ الحفظ...'
+                                          : 'Saving...'
+                                        : isRowServant
+                                        ? lang === 'ar'
+                                          ? 'إرجاع لمشارك'
+                                          : 'Demote'
+                                        : lang === 'ar'
+                                        ? 'ترقية إلى خادم'
+                                        : 'Promote to Servant'}
+                                    </span>
+                                  </button>
+                                )}
                                 <span className="text-lg font-extrabold text-[var(--accent)]">
                                   {formatNumber(row.percent, lang)}%
                                 </span>
@@ -1651,6 +1834,162 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
               {activeTab === 'content' && (
                 <div className="space-y-8">
+                  {/* Competition Builder */}
+                  <div className="space-y-3 pb-5 border-b border-stone-200 dark:border-white/10">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Trophy className="w-4 h-4 text-[var(--accent)]" />
+                        <h3 className="text-sm font-bold text-stone-900 dark:text-white">
+                          {lang === 'ar' ? 'كتابة وإعداد المسابقة' : 'Competition Builder'}
+                        </h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateDraftCompetition({ enabled: !draftCompetition.enabled })
+                        }
+                        className={`min-h-[32px] px-3 app-control text-xs font-bold cursor-pointer ${
+                          draftCompetition.enabled
+                            ? 'bg-[var(--accent)] text-white'
+                            : 'bg-stone-200 dark:bg-white/10 text-stone-700 dark:text-stone-300'
+                        }`}
+                      >
+                        {draftCompetition.enabled
+                          ? lang === 'ar'
+                            ? 'المسابقة مفعّلة'
+                            : 'Active'
+                          : lang === 'ar'
+                          ? 'المسابقة مخفية'
+                          : 'Hidden'}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <input
+                        type="text"
+                        dir="rtl"
+                        value={draftCompetition.titleAr}
+                        onChange={(e) => updateDraftCompetition({ titleAr: e.target.value })}
+                        placeholder="عنوان المسابقة (عربي)"
+                        className="min-h-[38px] px-3 app-control border border-stone-300 dark:border-white/15 bg-stone-50 dark:bg-black/25 text-xs sm:text-sm text-stone-900 dark:text-white"
+                      />
+                      <input
+                        type="text"
+                        dir="ltr"
+                        value={draftCompetition.titleEn}
+                        onChange={(e) => updateDraftCompetition({ titleEn: e.target.value })}
+                        placeholder="Competition Title (English)"
+                        className="min-h-[38px] px-3 app-control border border-stone-300 dark:border-white/15 bg-stone-50 dark:bg-black/25 text-xs sm:text-sm text-stone-900 dark:text-white"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <textarea
+                        dir="rtl"
+                        rows={2}
+                        value={draftCompetition.descriptionAr}
+                        onChange={(e) => updateDraftCompetition({ descriptionAr: e.target.value })}
+                        placeholder="وصف المسابقة بالعربية..."
+                        className="p-2.5 app-control border border-stone-300 dark:border-white/15 bg-stone-50 dark:bg-black/25 text-xs text-stone-900 dark:text-white"
+                      />
+                      <textarea
+                        dir="ltr"
+                        rows={2}
+                        value={draftCompetition.descriptionEn}
+                        onChange={(e) => updateDraftCompetition({ descriptionEn: e.target.value })}
+                        placeholder="Competition description (English)..."
+                        className="p-2.5 app-control border border-stone-300 dark:border-white/15 bg-stone-50 dark:bg-black/25 text-xs text-stone-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-stone-600 dark:text-stone-300">
+                        {lang === 'ar'
+                          ? `الأسئلة (${formatNumber(draftCompetition.questions.length, 'ar')})`
+                          : `Questions (${draftCompetition.questions.length})`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={addDraftCompetitionQuestion}
+                        className="min-h-[34px] px-3 app-control bg-[var(--accent)] text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>{lang === 'ar' ? 'إضافة سؤال للمسابقة' : 'Add Question'}</span>
+                      </button>
+                    </div>
+
+                    {draftCompetition.questions.map((q, idx) => (
+                      <div
+                        key={q.id}
+                        className="p-3 app-control border border-stone-200 dark:border-white/10 bg-stone-50/70 dark:bg-black/20 space-y-2.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-[var(--accent)]">
+                            {lang === 'ar' ? `سؤال ${formatNumber(idx + 1, 'ar')}` : `Q${idx + 1}`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => deleteDraftCompetitionQuestion(q.id)}
+                            className="text-xs text-red-600 hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>{lang === 'ar' ? 'حذف' : 'Delete'}</span>
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            dir="rtl"
+                            value={q.questionAr}
+                            onChange={(e) =>
+                              updateDraftCompetitionQuestion(q.id, { questionAr: e.target.value })
+                            }
+                            placeholder="نص السؤال بالعربية"
+                            className="min-h-[36px] px-2.5 app-control border border-stone-300 dark:border-white/15 bg-white dark:bg-black/30 text-xs text-stone-900 dark:text-white"
+                          />
+                          <input
+                            type="text"
+                            dir="ltr"
+                            value={q.questionEn}
+                            onChange={(e) =>
+                              updateDraftCompetitionQuestion(q.id, { questionEn: e.target.value })
+                            }
+                            placeholder="Question (EN)"
+                            className="min-h-[36px] px-2.5 app-control border border-stone-300 dark:border-white/15 bg-white dark:bg-black/30 text-xs text-stone-900 dark:text-white"
+                          />
+                        </div>
+                        {[0, 1, 2, 3].map((optIdx) => (
+                          <div key={optIdx} className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateDraftCompetitionQuestion(q.id, { correctIndex: optIdx })
+                              }
+                              className={`min-w-[30px] min-h-[30px] app-control border flex items-center justify-center shrink-0 cursor-pointer ${
+                                q.correctIndex === optIdx
+                                  ? 'bg-emerald-600 border-emerald-600 text-white'
+                                  : 'border-stone-300 dark:border-white/15 bg-white dark:bg-black/30 text-stone-400'
+                              }`}
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <input
+                              type="text"
+                              dir="rtl"
+                              value={q.optionsAr[optIdx] || ''}
+                              onChange={(e) => {
+                                const next = [...(q.optionsAr || ['', '', '', ''])];
+                                next[optIdx] = e.target.value;
+                                updateDraftCompetitionQuestion(q.id, { optionsAr: next });
+                              }}
+                              placeholder={`اختيار ${formatNumber(optIdx + 1, 'ar')}`}
+                              className="flex-1 min-h-[34px] px-2.5 app-control border border-stone-300 dark:border-white/15 bg-white dark:bg-black/30 text-xs text-stone-900 dark:text-white"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+
                   {/* Patristic Quotes Editor */}
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">

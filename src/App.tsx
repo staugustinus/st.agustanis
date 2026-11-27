@@ -8,6 +8,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { AuthGate } from './components/AuthGate';
 import { BethlehemJourney } from './components/BethlehemJourney';
 import { ChristmasAtmosphere } from './components/ChristmasAtmosphere';
+import { CompetitionSection } from './components/CompetitionSection';
 import { GospelReader } from './components/GospelReader';
 import { Header } from './components/Header';
 import { HeroSymbol } from './components/HeroSymbol';
@@ -15,6 +16,7 @@ import { ProgressAndDayNav } from './components/ProgressAndDayNav';
 import { ProgressHeart } from './components/ProgressHeart';
 import { OfflineIndicator, PWABanner } from './components/PWABanner';
 import { QuoteAndPractices } from './components/QuoteAndPractices';
+import { ServantPanel } from './components/ServantPanel';
 import { formatNumber, getDayPlan, getQuoteDayForPlanDay } from './data/readingPlan';
 import { useAppState } from './hooks/useAppState';
 import { useCalmMusic } from './hooks/useCalmMusic';
@@ -49,9 +51,12 @@ export default function App() {
     isChapterUnlocked,
     toggleDayCompleted,
     togglePractice,
+    answerCompetitionQuestion,
     setReaderFontSize,
     dismissPwaBanner,
     saveConfig,
+    saveServantContent,
+    promoteParticipantRole,
     importConfig,
     resetConfigToDefaults,
     jumpToToday,
@@ -60,6 +65,7 @@ export default function App() {
 
   const { isMusicPlaying, toggleMusic } = useCalmMusic();
   const [adminOpen, setAdminOpen] = useState(false);
+  const [servantOpen, setServantOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -155,29 +161,53 @@ export default function App() {
             musicPlaying={isMusicPlaying}
             familyName={copy.familyName}
             userName={activeUser.fullName}
+            isServant={activeUser.role === 'servant'}
             logoDataUrl={state.config.logoDataUrl}
             heroIcon={state.config.heroIcon}
             onToggleLang={toggleLang}
             onToggleTheme={toggleTheme}
             onToggleMusic={() => void toggleMusic()}
+            onOpenServant={() => setServantOpen(true)}
             onOpenAdmin={() => setAdminOpen(true)}
             onLogout={logoutUser}
           />
 
           <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-8">
-            {/* 2. Hero Welcome Section with Progress-Filling Heart */}
-            <section className="text-center space-y-4 py-2 sm:py-4">
-              <div className="inline-flex items-center justify-center gap-3">
-                <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-stone-900 dark:text-white text-balance">
-                  {copy.heroTitle}
-                </h1>
-                <span className="text-[var(--accent)] inline-flex items-center justify-center">
-                  <HeroSymbol icon={state.config.heroIcon} className="w-8 h-8 sm:w-10 sm:h-10" filled />
-                </span>
+            {/* 2. Personalized Hero Welcome Section (Logo + Large User Name + Welcome Message) */}
+            <section className="text-center space-y-5 py-2 sm:py-4">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-5">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 shrink-0 app-control overflow-hidden border border-stone-200 dark:border-white/15 bg-white dark:bg-[#261C20] shadow-sm flex items-center justify-center">
+                  {state.config.logoDataUrl ? (
+                    <img
+                      src={state.config.logoDataUrl}
+                      alt={copy.familyName}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-[var(--accent)] inline-flex items-center justify-center">
+                      <HeroSymbol icon={state.config.heroIcon} className="w-10 h-10 sm:w-12 sm:h-12" filled />
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-1.5 sm:text-start text-center min-w-0">
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-xs sm:text-sm font-semibold text-[var(--accent)]">
+                    <span>{copy.heroTitle}</span>
+                    <span aria-hidden="true" className="text-stone-400 dark:text-stone-500">·</span>
+                    <span className="text-stone-600 dark:text-stone-300">{copy.familyName}</span>
+                  </div>
+
+                  <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-stone-900 dark:text-white text-balance leading-tight">
+                    {activeUser.fullName}
+                  </h1>
+                </div>
               </div>
 
-              <p className="max-w-2xl mx-auto text-base sm:text-lg text-stone-600 dark:text-stone-300 leading-relaxed text-balance">
-                {copy.heroSubtitle}
+              <p className="max-w-2xl mx-auto text-base sm:text-lg text-stone-700 dark:text-stone-200 leading-relaxed text-balance">
+                {state.lang === 'ar'
+                  ? `أهلاً ومرحباً بك يا ${activeUser.fullName} — ${copy.heroSubtitle}`
+                  : `Welcome, ${activeUser.fullName} — ${copy.heroSubtitle}`}
               </p>
 
               {/* Journey to Bethlehem road progress (or classic heart if configured) */}
@@ -306,6 +336,14 @@ export default function App() {
               onTogglePractice={togglePractice}
               onShareText={handleShareText}
             />
+
+            {/* 8. Family Competition Section */}
+            <CompetitionSection
+              lang={state.lang}
+              competition={state.config.competition}
+              answers={activeUser.competitionAnswers || {}}
+              onAnswerQuestion={answerCompetitionQuestion}
+            />
           </main>
 
           {/* Quiet Editorial Footer */}
@@ -324,7 +362,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 8. Developer Settings Panel (Password 2027) */}
+      {/* Developer Settings Panel (Password 2027) */}
       <AdminPanel
         isOpen={adminOpen}
         lang={state.lang}
@@ -337,12 +375,29 @@ export default function App() {
         onGoogleSignIn={signInDeveloperGoogle}
         onGoogleSignOut={signOutDeveloperGoogle}
         onRefreshUsers={refreshCloudUsers}
+        onPromoteUser={promoteParticipantRole}
         onClose={() => setAdminOpen(false)}
         onSaveConfig={saveConfig}
         onImportConfig={importConfig}
         onResetDefaults={resetConfigToDefaults}
         onNotify={showToast}
       />
+
+      {/* Servant Panel (Only for participants promoted to 'servant') */}
+      {activeUser?.role === 'servant' && (
+        <ServantPanel
+          isOpen={servantOpen}
+          lang={state.lang}
+          config={state.config}
+          users={allKnownUsers}
+          activeUserId={state.activeUserId}
+          servantName={activeUser.fullName}
+          onRefreshUsers={refreshCloudUsers}
+          onClose={() => setServantOpen(false)}
+          onSaveServantContent={saveServantContent}
+          onNotify={showToast}
+        />
+      )}
 
       {/* Offline Indicator */}
       <OfflineIndicator lang={state.lang} />

@@ -29,6 +29,26 @@ service cloud.firestore {
       );
     }
 
+    function isVerifiedServant(participantId) {
+      return isValidId(participantId)
+        && exists(/databases/$(database)/documents/participants/$(participantId))
+        && get(/databases/$(database)/documents/participants/$(participantId)).data.role == 'servant';
+    }
+
+    function isValidCompetition(comp) {
+      return comp is map
+        && comp.keys().hasAll(['enabled', 'titleAr', 'titleEn', 'descriptionAr', 'descriptionEn', 'questions'])
+        && comp.keys().hasOnly(['enabled', 'titleAr', 'titleEn', 'descriptionAr', 'descriptionEn', 'rewardAr', 'rewardEn', 'questions'])
+        && comp.enabled is bool
+        && comp.titleAr is string && comp.titleAr.size() <= 160
+        && comp.titleEn is string && comp.titleEn.size() <= 160
+        && comp.descriptionAr is string && comp.descriptionAr.size() <= 600
+        && comp.descriptionEn is string && comp.descriptionEn.size() <= 600
+        && (!('rewardAr' in comp) || (comp.rewardAr is string && comp.rewardAr.size() <= 200))
+        && (!('rewardEn' in comp) || (comp.rewardEn is string && comp.rewardEn.size() <= 200))
+        && comp.questions is list && comp.questions.size() <= 60;
+    }
+
     function isValidAppConfig(data) {
       return data.keys().hasAll([
           'logoDataUrl', 'accentColor', 'lightCanvasColor', 'darkCanvasColor',
@@ -41,9 +61,10 @@ service cloud.firestore {
           'radiusPreset', 'cardStyle', 'heroIcon', 'heroIconSize',
           'progressStyle', 'journeyMigrated', 'pin2027Migrated',
           'lentStartDate', 'lentEndDate', 'sequentialLock', 'christmasTheme',
-          'copy', 'quotes', 'practices', 'updatedAt', 'updatedBy'
+          'copy', 'quotes', 'practices', 'competition', 'updatedAt', 'updatedBy'
         ])
         && (!('christmasTheme' in data) || data.christmasTheme is bool)
+        && (!('competition' in data) || isValidCompetition(data.competition))
         && data.logoDataUrl is string && data.logoDataUrl.size() <= 220000
         && data.accentColor is string && data.accentColor.size() <= 20
         && data.lightCanvasColor is string && data.lightCanvasColor.size() <= 20
@@ -60,7 +81,7 @@ service cloud.firestore {
         && data.quotes is list && data.quotes.size() <= 60
         && data.practices is list && data.practices.size() <= 100
         && data.updatedAt is number
-        && data.updatedBy is string && data.updatedBy == request.auth.uid;
+        && data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 128;
     }
 
     function isValidParticipant(data, participantId) {
@@ -71,19 +92,21 @@ service cloud.firestore {
           'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
-          'id', 'fullName', 'pinHash', 'currentDay', 'completedDays',
-          'passedChapters', 'checkedPractices', 'readerFontSize',
+          'id', 'fullName', 'pinHash', 'role', 'currentDay', 'completedDays',
+          'passedChapters', 'checkedPractices', 'competitionAnswers', 'readerFontSize',
           'planStartDate', 'completedChapters', 'percent', 'streak',
           'createdAt', 'updatedAt'
         ])
         && data.id is string && data.id == participantId && data.id.size() <= 128
         && data.fullName is string && data.fullName.size() >= 3 && data.fullName.size() <= 120
         && data.pinHash is string && data.pinHash.size() >= 16 && data.pinHash.size() <= 128
+        && (!('role' in data) || data.role in ['member', 'servant'])
         && data.currentDay is number && data.currentDay >= 1 && data.currentDay <= 200
         && data.completedDays is list && data.completedDays.size() <= 200
         && (data.completedDays.size() == 0 || data.completedDays[0] is number)
         && data.passedChapters is map
         && data.checkedPractices is map
+        && (!('competitionAnswers' in data) || data.competitionAnswers is map)
         && data.readerFontSize is number && data.readerFontSize >= 12 && data.readerFontSize <= 40
         && data.planStartDate is string && data.planStartDate.size() <= 20
         && data.completedChapters is number && data.completedChapters >= 0 && data.completedChapters <= 89
@@ -93,11 +116,24 @@ service cloud.firestore {
         && data.updatedAt is number;
     }
 
-    // Shared app configuration: readable by all users, writable only by verified admins
+    // Shared app configuration: readable by all users, writable by admins (full) or promoted servants (content/competition)
     match /app_config/{configId} {
       allow get: if isValidId(configId) && configId == 'main';
       allow list: if false;
-      allow create, update: if isAdmin() && isValidId(configId) && configId == 'main' && isValidAppConfig(incoming());
+      allow create: if isAdmin() && isValidId(configId) && configId == 'main' && isValidAppConfig(incoming()) && incoming().updatedBy == request.auth.uid;
+      allow update: if resource != null
+        && isValidId(configId)
+        && configId == 'main'
+        && isValidAppConfig(incoming())
+        && (
+          (isAdmin() && incoming().updatedBy == request.auth.uid) ||
+          (
+            isVerifiedServant(incoming().updatedBy)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'quotes', 'practices', 'competition', 'lentStartDate', 'lentEndDate', 'updatedAt', 'updatedBy'
+            ])
+          )
+        );
       allow delete: if false;
     }
 
@@ -105,7 +141,9 @@ service cloud.firestore {
     match /participants/{participantId} {
       allow get: if isValidId(participantId);
       allow list: if isAdmin();
-      allow create: if isValidId(participantId) && isValidParticipant(incoming(), participantId);
+      allow create: if isValidId(participantId)
+        && isValidParticipant(incoming(), participantId)
+        && (!('role' in incoming()) || incoming().role == 'member');
       allow update: if resource != null
         && isValidId(participantId)
         && isValidParticipant(incoming(), participantId)
@@ -115,9 +153,11 @@ service cloud.firestore {
             incoming().id == existing().id
             && incoming().createdAt == existing().createdAt
             && incoming().pinHash == existing().pinHash
+            && !incoming().diff(existing()).affectedKeys().hasAny(['role'])
             && incoming().diff(existing()).affectedKeys().hasOnly([
               'currentDay', 'completedDays', 'passedChapters', 'checkedPractices',
-              'readerFontSize', 'planStartDate', 'completedChapters', 'percent', 'streak', 'updatedAt'
+              'competitionAnswers', 'readerFontSize', 'planStartDate',
+              'completedChapters', 'percent', 'streak', 'updatedAt'
             ])
             && (
               !incoming().diff(existing()).affectedKeys().hasAny(['planStartDate'])
@@ -126,6 +166,26 @@ service cloud.firestore {
           )
         );
       allow delete: if isAdmin() && isValidId(participantId);
+    }
+
+    // Non-sensitive participant progress summary map (no pinHash) for promoted Servants and Developers
+    match /participants_summary/{summaryId} {
+      allow get: if isValidId(summaryId) && summaryId == 'main';
+      allow list: if false;
+      allow create: if isValidId(summaryId)
+        && summaryId == 'main'
+        && incoming().keys().hasAll(['entries', 'updatedAt'])
+        && incoming().keys().hasOnly(['entries', 'updatedAt'])
+        && incoming().entries is map
+        && incoming().updatedAt is number;
+      allow update: if resource != null
+        && isValidId(summaryId)
+        && summaryId == 'main'
+        && incoming().keys().hasAll(['entries', 'updatedAt'])
+        && incoming().keys().hasOnly(['entries', 'updatedAt'])
+        && incoming().entries is map
+        && incoming().updatedAt is number;
+      allow delete: if false;
     }
 
     // Allowlisted admin accounts

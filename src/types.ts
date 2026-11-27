@@ -78,6 +78,28 @@ export interface CustomCopy {
   en: CopyFields;
 }
 
+export type ParticipantRole = 'member' | 'servant';
+
+export interface CompetitionQuestion {
+  id: string;
+  questionAr: string;
+  questionEn: string;
+  optionsAr: string[];
+  optionsEn: string[];
+  correctIndex: number;
+}
+
+export interface CompetitionConfig {
+  enabled: boolean;
+  titleAr: string;
+  titleEn: string;
+  descriptionAr: string;
+  descriptionEn: string;
+  rewardAr?: string;
+  rewardEn?: string;
+  questions: CompetitionQuestion[];
+}
+
 export interface AppConfig {
   logoDataUrl: string | null;
   accentColor: string;
@@ -101,6 +123,7 @@ export interface AppConfig {
   copy: CustomCopy;
   quotes: FatherQuote[];
   practices: WeeklyPractice[];
+  competition?: CompetitionConfig;
 }
 
 export interface UserAccount {
@@ -109,10 +132,12 @@ export interface UserAccount {
   fullName: string;
   pin: string; // 4-digit ASCII string (local session convenience)
   pinHash?: string; // SHA-256 hex hash stored in Firestore
+  role?: ParticipantRole;
   currentDay: number;
   completedDays: number[];
   passedChapters?: Record<string, boolean>;
   checkedPractices: Record<string, boolean>;
+  competitionAnswers?: Record<string, number>;
   readerFontSize: number;
   planStartDate?: string; // YYYY-MM-DD when user joined
   createdAt: string;

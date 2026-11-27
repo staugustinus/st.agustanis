@@ -67,4 +67,14 @@ export const DEFAULT_CONFIG: AppConfig = {
   copy: DEFAULT_COPY,
   quotes: DEFAULT_QUOTES,
   practices: DEFAULT_PRACTICES,
+  competition: {
+    enabled: false,
+    titleAr: 'مسابقة صوم الميلاد',
+    titleEn: 'Nativity Fast Competition',
+    descriptionAr: 'أجب عن أسئلة المسابقة التي يضعها خدام الأسرة لاختبار معلوماتك الروحية.',
+    descriptionEn: 'Answer the fellowship competition questions prepared by the servants.',
+    rewardAr: '',
+    rewardEn: '',
+    questions: [],
+  },
 };

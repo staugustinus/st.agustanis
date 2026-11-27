@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, LogOut, Moon, Settings, Sun, Volume2, VolumeX } from 'lucide-react';
+import { Award, Globe, LogOut, Moon, Settings, Sun, Volume2, VolumeX } from 'lucide-react';
 import type { HeroIconKey, Language, ThemeMode } from '../types';
 import { HeroSymbol } from './HeroSymbol';
 
@@ -10,11 +10,13 @@ interface HeaderProps {
   musicPlaying: boolean;
   familyName: string;
   userName?: string | null;
+  isServant?: boolean;
   logoDataUrl: string | null;
   heroIcon: HeroIconKey;
   onToggleLang: () => void;
   onToggleTheme: () => void;
   onToggleMusic: () => void;
+  onOpenServant?: () => void;
   onOpenAdmin: () => void;
   onLogout?: () => void;
 }
@@ -26,11 +28,13 @@ export const Header: React.FC<HeaderProps> = ({
   musicPlaying,
   familyName,
   userName,
+  isServant = false,
   logoDataUrl,
   heroIcon,
   onToggleLang,
   onToggleTheme,
   onToggleMusic,
+  onOpenServant,
   onOpenAdmin,
   onLogout,
 }) => {
@@ -69,6 +73,20 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Zone 2: Quick Action Controls */}
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          {/* Servant Panel Button (Shown only to promoted Servants) */}
+          {isServant && onOpenServant && (
+            <button
+              type="button"
+              onClick={onOpenServant}
+              aria-label={lang === 'ar' ? 'لوحة الخادم' : 'Servant Panel'}
+              title={lang === 'ar' ? 'لوحة الخادم' : 'Servant Panel'}
+              className="min-h-[34px] sm:min-h-[38px] px-2 sm:px-2.5 py-1 app-control border border-amber-400/60 bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-200 text-[11px] font-bold flex items-center gap-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+            >
+              <Award className="w-3.5 h-3.5 shrink-0" />
+              <span>{lang === 'ar' ? 'لوحة الخادم' : 'Servant'}</span>
+            </button>
+          )}
+
           {/* Calm Background Music Toggle */}
           <button
             type="button"
