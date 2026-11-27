@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Check,
+  Cloud,
+  CloudOff,
   Copy,
   Download,
   Eye,
@@ -8,6 +10,7 @@ import {
   FileText,
   KeyRound,
   Lock,
+  LogOut,
   Palette,
   Plus,
   RotateCcw,
@@ -53,10 +56,20 @@ interface AdminPanelProps {
   config: AppConfig;
   users: UserAccount[];
   activeUserId: string | null;
+  adminEmail: string | null;
+  isAdminVerified: boolean;
+  onGoogleSignIn: () => Promise<{
+    ok: boolean;
+    errorCode?: string;
+    errorMessage?: string;
+  }>;
+  onGoogleSignOut: () => Promise<void>;
   onClose: () => void;
-  onSaveConfig: (nextConfig: AppConfig) => void;
-  onImportConfig: (incoming: Partial<AppConfig>) => void;
-  onResetDefaults: () => void;
+  onSaveConfig: (
+    nextConfig: AppConfig
+  ) => Promise<{ ok: boolean; syncedToCloud: boolean; error?: string }>;
+  onImportConfig: (incoming: Partial<AppConfig>) => Promise<void> | void;
+  onResetDefaults: () => Promise<void> | void;
   onNotify: (msg: string) => void;
 }
 
@@ -86,6 +99,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   config,
   users,
   activeUserId,
+  adminEmail,
+  isAdminVerified,
+  onGoogleSignIn,
+  onGoogleSignOut,
   onClose,
   onSaveConfig,
   onImportConfig,
@@ -101,6 +118,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Draft state: edits only commit when Developer clicks "حفظ التعديلات"
   const [draft, setDraft] = useState<AppConfig>(config);
   const [hasChanges, setHasChanges] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [googleAuthBusy, setGoogleAuthBusy] = useState(false);
+  const [googleAuthError, setGoogleAuthError] = useState<string | null>(null);
 
   const [editLang, setEditLang] = useState<Language>(lang);
   const [selectedDay, setSelectedDay] = useState(1);
@@ -147,11 +167,68 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  const handleSave = () => {
-    onSaveConfig(draft);
-    setHasChanges(false);
-    onNotify(lang === 'ar' ? 'تم حفظ إعدادات المطورين بنجاح' : 'Developer settings saved');
-    onClose();
+  const handleGoogleConnect = async () => {
+    if (googleAuthBusy) return;
+    setGoogleAuthBusy(true);
+    setGoogleAuthError(null);
+    try {
+      const res = await onGoogleSignIn();
+      if (!res.ok) {
+        if (res.errorCode === 'auth/unauthorized-domain') {
+          setGoogleAuthError(
+            lang === 'ar'
+              ? `النطاق (${window.location.hostname}) غير مضاف في Firebase Authorized Domains. أضفه من لوحة Firebase > Authentication > Settings.`
+              : `Domain (${window.location.hostname}) is not in Firebase Authorized Domains.`
+          );
+        } else if (res.errorCode !== 'auth/popup-closed-by-user') {
+          setGoogleAuthError(
+            lang === 'ar'
+              ? 'تعذّر تسجيل الدخول بحساب جوجل، حاول مرة أخرى'
+              : res.errorMessage || 'Google Sign-In failed'
+          );
+        }
+        return;
+      }
+      onNotify(
+        lang === 'ar'
+          ? 'تم ربط حساب المطور بنجاح — يمكنك الآن نشر التعديلات ورؤية جميع المسجلين'
+          : 'Developer Google account connected'
+      );
+    } finally {
+      setGoogleAuthBusy(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const res = await onSaveConfig(draft);
+      setHasChanges(false);
+      if (res.syncedToCloud) {
+        onNotify(
+          lang === 'ar'
+            ? 'تم حفظ التعديلات ونشرها فوراً لجميع المستخدمين'
+            : 'Saved & published live to all users'
+        );
+        onClose();
+      } else if (res.error === 'logo-too-large') {
+        onNotify(
+          lang === 'ar'
+            ? 'تم الحفظ محلياً، لكن حجم الصورة كبير جداً للمزامنة — اختر صورة أصغر'
+            : 'Saved locally, but logo size exceeds cloud limit — try a smaller image'
+        );
+      } else {
+        onNotify(
+          lang === 'ar'
+            ? 'تم الحفظ على هذا الجهاز — اربط حساب المطور بجوجل لتصل التعديلات للجميع تلقائياً'
+            : 'Saved locally — connect Developer Google account to sync to all users'
+        );
+        onClose();
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -161,15 +238,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     reader.onload = () => {
       const img = new Image();
       img.onload = () => {
-        const maxDim = 256;
+        const maxDim = 192;
         const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
         const canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL('image/png', 0.9);
+          let dataUrl = canvas.toDataURL('image/png', 0.9);
+          if (dataUrl.length > 180000) {
+            dataUrl = canvas.toDataURL('image/webp', 0.85);
+          }
+          if (dataUrl.length > 180000) {
+            dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          }
           updateDraft((prev) => ({ ...prev, logoDataUrl: dataUrl }));
         }
       };
@@ -506,6 +589,76 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </form>
         ) : (
           <>
+            {/* Live Cloud Sync Bar */}
+            <div
+              className={`px-4 py-2.5 border-b border-stone-200 dark:border-white/10 flex flex-wrap items-center justify-between gap-2 shrink-0 ${
+                isAdminVerified
+                  ? 'bg-emerald-50/80 dark:bg-emerald-950/25'
+                  : 'bg-amber-50/80 dark:bg-amber-950/20'
+              }`}
+            >
+              <div className="flex items-center gap-2 text-xs">
+                {isAdminVerified ? (
+                  <>
+                    <Cloud className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="font-bold text-emerald-800 dark:text-emerald-200">
+                      {lang === 'ar'
+                        ? `النشر السحابي المباشر مفعّل (${adminEmail}) — كل تعديل يظهر فوراً لجميع المسجلين`
+                        : `Live Cloud Sync Active (${adminEmail})`}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <CloudOff className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span className="font-semibold text-amber-900 dark:text-amber-200">
+                      {adminEmail
+                        ? lang === 'ar'
+                          ? `الحساب (${adminEmail}) غير مصرح له بالنشر السحابي`
+                          : `Account (${adminEmail}) is not authorized`
+                        : lang === 'ar'
+                        ? 'اربط حساب المطور بجوجل لتصل تعديلاتك (الصور والنصوص) فوراً لكل المسجلين'
+                        : 'Connect Developer Google account to push edits live to everyone'}
+                    </span>
+                  </>
+                )}
+              </div>
+
+              {isAdminVerified ? (
+                <button
+                  type="button"
+                  onClick={() => void onGoogleSignOut()}
+                  className="min-h-[32px] px-2.5 py-1 app-control border border-emerald-300 dark:border-emerald-700/50 text-[11px] font-bold text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 flex items-center gap-1 cursor-pointer"
+                >
+                  <LogOut className="w-3 h-3" />
+                  <span>{lang === 'ar' ? 'فصل جوجل' : 'Disconnect'}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={googleAuthBusy}
+                  onClick={handleGoogleConnect}
+                  className="min-h-[34px] px-3 py-1 app-control bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-60 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Cloud className="w-3.5 h-3.5" />
+                  <span>
+                    {googleAuthBusy
+                      ? lang === 'ar'
+                        ? 'جارٍ الربط...'
+                        : 'Connecting...'
+                      : lang === 'ar'
+                      ? 'ربط حساب المطور بجوجل'
+                      : 'Connect Google Admin'}
+                  </span>
+                </button>
+              )}
+
+              {googleAuthError && (
+                <p className="w-full text-[11px] font-semibold text-red-600 dark:text-red-400">
+                  {googleAuthError}
+                </p>
+              )}
+            </div>
+
             {/* Navigation Tabs */}
             <div className="px-4 py-2.5 border-b border-stone-200 dark:border-white/10 flex items-center gap-1.5 overflow-x-auto shrink-0 bg-stone-50/60 dark:bg-black/20">
               {tabs.map((tab) => (
@@ -843,9 +996,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   )}
 
                   <p className="text-[11px] text-stone-500 dark:text-stone-400 pt-1">
-                    {lang === 'ar'
-                      ? 'ملاحظة: يعرض هذا القسم جميع الحسابات المسجّلة والمحفوظة على هذا المتصفح/الجهاز.'
-                      : 'Note: This view shows all user accounts registered and stored on this browser/device.'}
+                    {isAdminVerified
+                      ? lang === 'ar'
+                        ? 'ملاحظة: يعرض هذا القسم جميع المسجلين وتطوّر قراءتهم مباشرة عبر السحابة من كافة الأجهزة.'
+                        : 'Note: Showing all registered participants and live reading progress synced from all devices.'
+                      : lang === 'ar'
+                      ? 'ملاحظة: لعرض جميع المسجلين من كافة الأجهزة، اضغط "ربط حساب المطور بجوجل" في الأعلى.'
+                      : 'Note: Connect your Developer Google account above to load registered users from all devices.'}
                   </p>
                 </div>
               )}
@@ -1401,11 +1558,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={handleSave}
-                  className="min-h-[42px] px-5 py-2 app-control bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-md cursor-pointer"
+                  disabled={saving}
+                  onClick={() => void handleSave()}
+                  className="min-h-[42px] px-5 py-2 app-control bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-65 text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-md cursor-pointer"
                 >
                   <Save className="w-4 h-4" />
-                  <span>{lang === 'ar' ? 'حفظ التعديلات' : 'Save Changes'}</span>
+                  <span>
+                    {saving
+                      ? lang === 'ar'
+                        ? 'جارٍ النشر...'
+                        : 'Publishing...'
+                      : lang === 'ar'
+                      ? 'حفظ التعديلات'
+                      : 'Save Changes'}
+                  </span>
                 </button>
               </div>
             </div>

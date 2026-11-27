@@ -21,6 +21,9 @@ export default function App() {
   const {
     state,
     activeUser,
+    adminUser,
+    isAdminVerified,
+    allKnownUsers,
     userStartDate,
     lentEndDate,
     totalDays,
@@ -35,6 +38,8 @@ export default function App() {
     registerUser,
     loginUser,
     logoutUser,
+    signInDeveloperGoogle,
+    signOutDeveloperGoogle,
     toggleLang,
     toggleTheme,
     setCurrentDay,
@@ -306,8 +311,12 @@ export default function App() {
         lang={state.lang}
         theme={state.theme}
         config={state.config}
-        users={existingUsersList}
+        users={allKnownUsers}
         activeUserId={state.activeUserId}
+        adminEmail={adminUser?.email || null}
+        isAdminVerified={isAdminVerified}
+        onGoogleSignIn={signInDeveloperGoogle}
+        onGoogleSignOut={signOutDeveloperGoogle}
         onClose={() => setAdminOpen(false)}
         onSaveConfig={saveConfig}
         onImportConfig={importConfig}

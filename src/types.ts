@@ -103,8 +103,10 @@ export interface AppConfig {
 
 export interface UserAccount {
   id: string;
+  cloudId?: string;
   fullName: string;
-  pin: string; // 4-digit ASCII string
+  pin: string; // 4-digit ASCII string (local session convenience)
+  pinHash?: string; // SHA-256 hex hash stored in Firestore
   currentDay: number;
   completedDays: number[];
   passedChapters?: Record<string, boolean>;
@@ -112,6 +114,7 @@ export interface UserAccount {
   readerFontSize: number;
   planStartDate?: string; // YYYY-MM-DD when user joined
   createdAt: string;
+  updatedAt?: number;
 }
 
 export interface AppState {

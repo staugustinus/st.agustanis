@@ -1,0 +1,139 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email_verified == true && request.auth.token.email == 'thomasgawdat3@gmail.com') ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidAppConfig(data) {
+      return data.keys().hasAll([
+          'logoDataUrl', 'accentColor', 'lightCanvasColor', 'darkCanvasColor',
+          'radiusPreset', 'cardStyle', 'heroIcon', 'heroIconSize',
+          'progressStyle', 'lentStartDate', 'lentEndDate', 'sequentialLock',
+          'copy', 'quotes', 'practices', 'updatedAt', 'updatedBy'
+        ])
+        && data.keys().hasOnly([
+          'logoDataUrl', 'accentColor', 'lightCanvasColor', 'darkCanvasColor',
+          'radiusPreset', 'cardStyle', 'heroIcon', 'heroIconSize',
+          'progressStyle', 'journeyMigrated', 'pin2027Migrated',
+          'lentStartDate', 'lentEndDate', 'sequentialLock',
+          'copy', 'quotes', 'practices', 'updatedAt', 'updatedBy'
+        ])
+        && data.logoDataUrl is string && data.logoDataUrl.size() <= 220000
+        && data.accentColor is string && data.accentColor.size() <= 20
+        && data.lightCanvasColor is string && data.lightCanvasColor.size() <= 20
+        && data.darkCanvasColor is string && data.darkCanvasColor.size() <= 20
+        && data.radiusPreset in ['sharp', 'soft', 'rounded']
+        && data.cardStyle in ['bordered', 'elevated', 'flat']
+        && data.heroIcon in ['heart', 'cross', 'star', 'flame', 'book', 'sun']
+        && data.heroIconSize in ['sm', 'md', 'lg']
+        && data.progressStyle in ['journey', 'heart']
+        && data.lentStartDate is string && data.lentStartDate.size() <= 20
+        && data.lentEndDate is string && data.lentEndDate.size() <= 20
+        && data.sequentialLock is bool
+        && data.copy is map
+        && data.quotes is list && data.quotes.size() <= 60
+        && data.practices is list && data.practices.size() <= 100
+        && data.updatedAt is number
+        && data.updatedBy is string && data.updatedBy == request.auth.uid;
+    }
+
+    function isValidParticipant(data, participantId) {
+      return data.keys().hasAll([
+          'id', 'fullName', 'pinHash', 'currentDay', 'completedDays',
+          'passedChapters', 'checkedPractices', 'readerFontSize',
+          'planStartDate', 'completedChapters', 'percent', 'streak',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'fullName', 'pinHash', 'currentDay', 'completedDays',
+          'passedChapters', 'checkedPractices', 'readerFontSize',
+          'planStartDate', 'completedChapters', 'percent', 'streak',
+          'createdAt', 'updatedAt'
+        ])
+        && data.id is string && data.id == participantId && data.id.size() <= 128
+        && data.fullName is string && data.fullName.size() >= 3 && data.fullName.size() <= 120
+        && data.pinHash is string && data.pinHash.size() >= 16 && data.pinHash.size() <= 128
+        && data.currentDay is number && data.currentDay >= 1 && data.currentDay <= 200
+        && data.completedDays is list && data.completedDays.size() <= 200
+        && (data.completedDays.size() == 0 || data.completedDays[0] is number)
+        && data.passedChapters is map
+        && data.checkedPractices is map
+        && data.readerFontSize is number && data.readerFontSize >= 12 && data.readerFontSize <= 40
+        && data.planStartDate is string && data.planStartDate.size() <= 20
+        && data.completedChapters is number && data.completedChapters >= 0 && data.completedChapters <= 89
+        && data.percent is number && data.percent >= 0 && data.percent <= 100
+        && data.streak is number && data.streak >= 0 && data.streak <= 200
+        && data.createdAt is string && data.createdAt.size() <= 40
+        && data.updatedAt is number;
+    }
+
+    // Shared app configuration: readable by all users, writable only by verified admins
+    match /app_config/{configId} {
+      allow get: if isValidId(configId) && configId == 'main';
+      allow list: if false;
+      allow create, update: if isAdmin() && isValidId(configId) && configId == 'main' && isValidAppConfig(incoming());
+      allow delete: if false;
+    }
+
+    // Registered participants & their reading progress
+    match /participants/{participantId} {
+      allow get: if isValidId(participantId);
+      allow list: if isAdmin();
+      allow create: if isValidId(participantId) && isValidParticipant(incoming(), participantId);
+      allow update: if resource != null
+        && isValidId(participantId)
+        && isValidParticipant(incoming(), participantId)
+        && (
+          isAdmin() ||
+          (
+            incoming().id == existing().id
+            && incoming().createdAt == existing().createdAt
+            && incoming().pinHash == existing().pinHash
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'currentDay', 'completedDays', 'passedChapters', 'checkedPractices',
+              'readerFontSize', 'completedChapters', 'percent', 'streak', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(participantId);
+    }
+
+    // Allowlisted admin accounts
+    match /admins/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // Connection health check doc
+    match /test/connection {
+      allow get: if true;
+      allow list, write: if false;
+    }
+  }
+}

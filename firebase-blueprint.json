@@ -1,0 +1,205 @@
+{
+  "entities": {
+    "AppConfig": {
+      "title": "AppConfig",
+      "description": "Shared application configuration customized by the developer (branding logo, colors, shapes, texts, dates, quotes, and weekly practices).",
+      "type": "object",
+      "properties": {
+        "logoDataUrl": {
+          "type": "string",
+          "maxLength": 220000,
+          "description": "Compressed PNG/WebP data URL of the fellowship logo or empty string."
+        },
+        "accentColor": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "lightCanvasColor": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "darkCanvasColor": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "radiusPreset": {
+          "type": "string",
+          "enum": ["sharp", "soft", "rounded"],
+          "maxLength": 20
+        },
+        "cardStyle": {
+          "type": "string",
+          "enum": ["bordered", "elevated", "flat"],
+          "maxLength": 20
+        },
+        "heroIcon": {
+          "type": "string",
+          "enum": ["heart", "cross", "star", "flame", "book", "sun"],
+          "maxLength": 20
+        },
+        "heroIconSize": {
+          "type": "string",
+          "enum": ["sm", "md", "lg"],
+          "maxLength": 10
+        },
+        "progressStyle": {
+          "type": "string",
+          "enum": ["journey", "heart"],
+          "maxLength": 20
+        },
+        "lentStartDate": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "lentEndDate": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "sequentialLock": {
+          "type": "boolean"
+        },
+        "copy": {
+          "type": "object",
+          "description": "Arabic and English UI strings map."
+        },
+        "quotes": {
+          "type": "array",
+          "description": "Daily patristic quotes list (up to 60 entries)."
+        },
+        "practices": {
+          "type": "array",
+          "description": "Weekly spiritual practices list (up to 100 entries)."
+        },
+        "updatedAt": {
+          "type": "number"
+        },
+        "updatedBy": {
+          "type": "string",
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "logoDataUrl",
+        "accentColor",
+        "lightCanvasColor",
+        "darkCanvasColor",
+        "radiusPreset",
+        "cardStyle",
+        "heroIcon",
+        "heroIconSize",
+        "progressStyle",
+        "lentStartDate",
+        "lentEndDate",
+        "sequentialLock",
+        "copy",
+        "quotes",
+        "practices",
+        "updatedAt",
+        "updatedBy"
+      ]
+    },
+    "Participant": {
+      "title": "Participant",
+      "description": "Registered fellowship participant account and daily Gospel reading progress.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fullName": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "pinHash": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128
+        },
+        "currentDay": {
+          "type": "number"
+        },
+        "completedDays": {
+          "type": "array"
+        },
+        "passedChapters": {
+          "type": "object"
+        },
+        "checkedPractices": {
+          "type": "object"
+        },
+        "readerFontSize": {
+          "type": "number"
+        },
+        "planStartDate": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "completedChapters": {
+          "type": "number"
+        },
+        "percent": {
+          "type": "number"
+        },
+        "streak": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "fullName",
+        "pinHash",
+        "currentDay",
+        "completedDays",
+        "passedChapters",
+        "checkedPractices",
+        "readerFontSize",
+        "planStartDate",
+        "completedChapters",
+        "percent",
+        "streak",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Authorized developer/admin user record.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "createdAt": {
+          "type": "string",
+          "maxLength": 40
+        }
+      },
+      "required": ["email", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/app_config/{configId}": {
+      "schema": { "$ref": "#/entities/AppConfig" },
+      "description": "Shared live app configuration (main document) readable by all users and writable only by verified admins."
+    },
+    "/participants/{participantId}": {
+      "schema": { "$ref": "#/entities/Participant" },
+      "description": "Registered participants and their reading/quiz progress, listable only by verified admins."
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Allowlisted admin UIDs."
+    }
+  }
+}

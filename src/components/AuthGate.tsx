@@ -25,8 +25,8 @@ interface AuthGateProps {
   onToggleLang: () => void;
   onToggleTheme: () => void;
   onOpenAdmin: () => void;
-  onRegister: (fullName: string, pin: string) => { ok: boolean; error?: string };
-  onLogin: (fullName: string, pin: string) => { ok: boolean; error?: string };
+  onRegister: (fullName: string, pin: string) => Promise<{ ok: boolean; error?: string }>;
+  onLogin: (fullName: string, pin: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 export const AuthGate: React.FC<AuthGateProps> = ({
@@ -53,6 +53,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({
   const [pin, setPin] = useState('');
   const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const handlePinChange = (val: string) => {
     const normalized = normalizeDigits(val).replace(/\D/g, '').slice(0, 4);
@@ -60,8 +61,9 @@ export const AuthGate: React.FC<AuthGateProps> = ({
     setError(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     setError(null);
 
     if (!isValidTripleName(fullName)) {
@@ -82,9 +84,17 @@ export const AuthGate: React.FC<AuthGateProps> = ({
       return;
     }
 
-    const res = mode === 'register' ? onRegister(fullName.trim(), pin) : onLogin(fullName.trim(), pin);
-    if (!res.ok && res.error) {
-      setError(res.error);
+    setSubmitting(true);
+    try {
+      const res =
+        mode === 'register'
+          ? await onRegister(fullName.trim(), pin)
+          : await onLogin(fullName.trim(), pin);
+      if (!res.ok && res.error) {
+        setError(res.error);
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -287,11 +297,16 @@ export const AuthGate: React.FC<AuthGateProps> = ({
 
             <button
               type="submit"
-              className="w-full min-h-[48px] app-control bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-sm sm:text-base font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              disabled={submitting}
+              className="w-full min-h-[48px] app-control bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-70 text-white text-sm sm:text-base font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
               <Lock className="w-4 h-4" />
               <span>
-                {mode === 'register'
+                {submitting
+                  ? lang === 'ar'
+                    ? 'جارٍ الاتصال...'
+                    : 'Connecting...'
+                  : mode === 'register'
                   ? lang === 'ar'
                     ? 'بدء الرحلة وحفظ التقدّم'
                     : 'Register & Start Journey'

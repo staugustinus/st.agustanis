@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { User as FirebaseUser } from 'firebase/auth';
 import { DEFAULT_CONFIG } from '../data/defaultConfig';
 import {
   buildReadingPlan,
@@ -13,6 +14,20 @@ import {
   getTodayDateString,
   TOTAL_GOSPEL_CHAPTERS,
 } from '../data/readingPlan';
+import {
+  createParticipantInCloud,
+  getParticipantDocId,
+  hashParticipantPin,
+  isVerifiedAdminUser,
+  lookupParticipantInCloud,
+  publishAppConfigToCloud,
+  signInDeveloperWithGoogle,
+  signOutDeveloperGoogle,
+  subscribeAdminAuth,
+  subscribeAllParticipants,
+  subscribeAppConfig,
+  syncParticipantProgressToCloud,
+} from '../firebase';
 import type { AppConfig, AppState, GospelKey, Language, ThemeMode, UserAccount } from '../types';
 import { isValidTripleName, normalizeDigits, normalizeNameKey } from '../utils/digits';
 
@@ -101,7 +116,6 @@ function createInitialState(): AppState {
       };
     }
 
-    // Check legacy v1 config to carry over developer config if any
     const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacy) {
       const parsedLegacy = JSON.parse(legacy) as { lang?: Language; theme?: ThemeMode; config?: Partial<AppConfig> };
@@ -150,6 +164,13 @@ function hexToRgba(hex: string, alpha: number): string {
 
 export function useAppState() {
   const [state, setState] = useState<AppState>(createInitialState);
+  const [adminUser, setAdminUser] = useState<FirebaseUser | null>(null);
+  const [cloudUsers, setCloudUsers] = useState<UserAccount[]>([]);
+
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const syncTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     try {
@@ -159,7 +180,53 @@ export function useAppState() {
     }
   }, [state]);
 
-  // Automatically sync remote public/config.json when newer than locally cached config
+  // Listen to Firebase Admin Google authentication state
+  useEffect(() => {
+    return subscribeAdminAuth((user) => {
+      setAdminUser(user);
+    });
+  }, []);
+
+  const isAdminVerified = useMemo(() => isVerifiedAdminUser(adminUser), [adminUser]);
+
+  // Live Firestore listener on app_config/main: pushes any developer edit to all users in real time
+  useEffect(() => {
+    return subscribeAppConfig((remote) => {
+      const remoteTs = typeof remote.updatedAt === 'number' ? remote.updatedAt : 0;
+      if (remoteTs <= 0) return;
+
+      setState((prev) => {
+        const localTs = typeof prev.config.updatedAt === 'number' ? prev.config.updatedAt : 0;
+        if (remoteTs < localTs) return prev;
+        // Preserve local adminPin (never stored in Firestore)
+        const merged = mergeConfig(prev.config, {
+          ...remote,
+          adminPin: prev.config.adminPin,
+          adminPinEnabled: prev.config.adminPinEnabled,
+        });
+        return {
+          ...prev,
+          config: {
+            ...merged,
+            updatedAt: remoteTs,
+          },
+        };
+      });
+    });
+  }, []);
+
+  // When verified admin is signed in, listen live to all participants registered across all devices
+  useEffect(() => {
+    if (!isAdminVerified) {
+      setCloudUsers([]);
+      return;
+    }
+    return subscribeAllParticipants((usersList) => {
+      setCloudUsers(usersList);
+    });
+  }, [isAdminVerified]);
+
+  // Fallback static public/config.json sync when newer
   useEffect(() => {
     let active = true;
     const syncRemoteConfig = async () => {
@@ -240,13 +307,60 @@ export function useAppState() {
     return state.users[state.activeUserId] || null;
   }, [state.activeUserId, state.users]);
 
+  // Ensure active participant always syncs back up to Firestore (including legacy local-only users)
+  useEffect(() => {
+    if (!activeUser) return;
+    const ensureCloudRecord = async () => {
+      const nameKey = normalizeNameKey(activeUser.fullName);
+      const docId = activeUser.cloudId || (await getParticipantDocId(nameKey));
+      const pinHash =
+        activeUser.pinHash ||
+        (activeUser.pin ? await hashParticipantPin(nameKey, activeUser.pin) : '');
+      if (!pinHash) return;
+
+      const enriched: UserAccount = {
+        ...activeUser,
+        cloudId: docId,
+        pinHash,
+      };
+
+      if (!activeUser.cloudId || !activeUser.pinHash) {
+        setState((prev) => {
+          if (!prev.users[activeUser.id]) return prev;
+          return {
+            ...prev,
+            users: {
+              ...prev.users,
+              [activeUser.id]: {
+                ...prev.users[activeUser.id],
+                cloudId: docId,
+                pinHash,
+              },
+            },
+          };
+        });
+      }
+      await syncParticipantProgressToCloud(enriched, stateRef.current.config);
+    };
+    void ensureCloudRecord();
+  }, [activeUser?.id]);
+
+  const scheduleCloudSync = useCallback((user: UserAccount) => {
+    if (syncTimerRef.current) {
+      window.clearTimeout(syncTimerRef.current);
+    }
+    syncTimerRef.current = window.setTimeout(() => {
+      void syncParticipantProgressToCloud(user, stateRef.current.config);
+    }, 250);
+  }, []);
+
   const registerUser = useCallback(
-    (rawName: string, rawPin: string): { ok: boolean; error?: string } => {
+    async (rawName: string, rawPin: string): Promise<{ ok: boolean; error?: string }> => {
       if (!isValidTripleName(rawName)) {
         return {
           ok: false,
           error:
-            state.lang === 'ar'
+            stateRef.current.lang === 'ar'
               ? 'يرجى كتابة الاسم ثلاثي (٣ كلمات على الأقل)'
               : 'Please enter a full triple name (at least 3 words)',
         };
@@ -256,34 +370,50 @@ export function useAppState() {
         return {
           ok: false,
           error:
-            state.lang === 'ar'
+            stateRef.current.lang === 'ar'
               ? 'كلمة المرور يجب أن تكون ٤ أرقام'
               : 'Password must be exactly 4 digits',
         };
       }
 
       const id = normalizeNameKey(rawName);
-      if (state.users[id]) {
+      if (stateRef.current.users[id]) {
         return {
           ok: false,
           error:
-            state.lang === 'ar'
+            stateRef.current.lang === 'ar'
               ? 'هذا الاسم مسجّل بالفعل، اختر "دخول لحسابي" وأدخل كلمة المرور'
               : 'This name is already registered. Switch to Sign In and enter your PIN.',
         };
       }
 
+      const cloudLookup = await lookupParticipantInCloud(id);
+      if (cloudLookup.exists) {
+        return {
+          ok: false,
+          error:
+            stateRef.current.lang === 'ar'
+              ? 'هذا الاسم مسجّل بالفعل، اختر "دخول لحسابي" وأدخل كلمة المرور'
+              : 'This name is already registered. Switch to Sign In and enter your PIN.',
+        };
+      }
+
+      const pinHash = await hashParticipantPin(id, cleanPin);
+      const nowIso = new Date().toISOString();
       const newUser: UserAccount = {
         id,
+        cloudId: cloudLookup.docId,
         fullName: rawName.trim().replace(/\s+/g, ' '),
         pin: cleanPin,
+        pinHash,
         currentDay: 1,
         completedDays: [],
         passedChapters: {},
         checkedPractices: {},
         readerFontSize: 21,
         planStartDate: getTodayDateString(),
-        createdAt: new Date().toISOString(),
+        createdAt: nowIso,
+        updatedAt: Date.now(),
       };
 
       setState((prev) => ({
@@ -294,40 +424,116 @@ export function useAppState() {
           [id]: newUser,
         },
       }));
+
+      await createParticipantInCloud(newUser, pinHash, stateRef.current.config);
       return { ok: true };
     },
-    [state.lang, state.users]
+    []
   );
 
   const loginUser = useCallback(
-    (rawName: string, rawPin: string): { ok: boolean; error?: string } => {
+    async (rawName: string, rawPin: string): Promise<{ ok: boolean; error?: string }> => {
       const id = normalizeNameKey(rawName);
       const cleanPin = normalizeDigits(rawPin).replace(/\D/g, '');
-      const existing = state.users[id];
+      const pinHash = await hashParticipantPin(id, cleanPin);
+      const localExisting = stateRef.current.users[id];
 
-      if (!existing) {
+      const cloudLookup = await lookupParticipantInCloud(id);
+      if (cloudLookup.exists && cloudLookup.data) {
+        if (cloudLookup.data.pinHash !== pinHash) {
+          return {
+            ok: false,
+            error:
+              stateRef.current.lang === 'ar'
+                ? 'كلمة المرور (٤ أرقام) غير صحيحة'
+                : 'Incorrect 4-digit PIN',
+          };
+        }
+
+        const localTs = localExisting?.updatedAt || 0;
+        const cloudTs = cloudLookup.data.updatedAt || 0;
+        const useLocalProgress = Boolean(localExisting && localTs > cloudTs);
+
+        const mergedUser: UserAccount = {
+          id,
+          cloudId: cloudLookup.docId,
+          fullName: cloudLookup.data.fullName || localExisting?.fullName || rawName.trim(),
+          pin: cleanPin,
+          pinHash,
+          currentDay: useLocalProgress ? localExisting!.currentDay : cloudLookup.data.currentDay || 1,
+          completedDays: useLocalProgress
+            ? localExisting!.completedDays
+            : cloudLookup.data.completedDays || [],
+          passedChapters: useLocalProgress
+            ? localExisting!.passedChapters || {}
+            : cloudLookup.data.passedChapters || {},
+          checkedPractices: useLocalProgress
+            ? localExisting!.checkedPractices || {}
+            : cloudLookup.data.checkedPractices || {},
+          readerFontSize: useLocalProgress
+            ? localExisting!.readerFontSize || 21
+            : cloudLookup.data.readerFontSize || 21,
+          planStartDate:
+            cloudLookup.data.planStartDate || localExisting?.planStartDate || getTodayDateString(),
+          createdAt: cloudLookup.data.createdAt || localExisting?.createdAt || new Date().toISOString(),
+          updatedAt: Math.max(localTs, cloudTs),
+        };
+
+        setState((prev) => ({
+          ...prev,
+          activeUserId: id,
+          users: {
+            ...prev.users,
+            [id]: mergedUser,
+          },
+        }));
+
+        if (useLocalProgress) {
+          void syncParticipantProgressToCloud(mergedUser, stateRef.current.config);
+        }
+        return { ok: true };
+      }
+
+      if (!localExisting) {
         return {
           ok: false,
           error:
-            state.lang === 'ar'
+            stateRef.current.lang === 'ar'
               ? 'لا يوجد حساب بهذا الاسم الثلاثي، تأكد من الاسم أو أنشئ حساباً جديداً'
               : 'No account found with this name. Check spelling or create a new account.',
         };
       }
-      if (existing.pin !== cleanPin) {
+
+      if (localExisting.pin !== cleanPin) {
         return {
           ok: false,
           error:
-            state.lang === 'ar'
+            stateRef.current.lang === 'ar'
               ? 'كلمة المرور (٤ أرقام) غير صحيحة'
               : 'Incorrect 4-digit PIN',
         };
       }
 
-      setState((prev) => ({ ...prev, activeUserId: id }));
+      const upgradedUser: UserAccount = {
+        ...localExisting,
+        cloudId: cloudLookup.docId,
+        pinHash,
+      };
+      setState((prev) => ({
+        ...prev,
+        activeUserId: id,
+        users: {
+          ...prev.users,
+          [id]: upgradedUser,
+        },
+      }));
+
+      if (!cloudLookup.offlineOrError) {
+        await createParticipantInCloud(upgradedUser, pinHash, stateRef.current.config);
+      }
       return { ok: true };
     },
-    [state.lang, state.users]
+    []
   );
 
   const logoutUser = useCallback(() => {
@@ -372,7 +578,12 @@ export function useAppState() {
     (updater: (u: UserAccount) => UserAccount) => {
       setState((prev) => {
         if (!prev.activeUserId || !prev.users[prev.activeUserId]) return prev;
-        const updated = updater(prev.users[prev.activeUserId]);
+        const base = prev.users[prev.activeUserId];
+        const updated: UserAccount = {
+          ...updater(base),
+          updatedAt: Date.now(),
+        };
+        scheduleCloudSync(updated);
         return {
           ...prev,
           users: {
@@ -382,7 +593,7 @@ export function useAppState() {
         };
       });
     },
-    []
+    [scheduleCloudSync]
   );
 
   const setCurrentDay = useCallback(
@@ -491,26 +702,88 @@ export function useAppState() {
     setState((prev) => ({ ...prev, pwaBannerDismissed: true }));
   }, []);
 
-  const saveConfig = useCallback((nextConfig: AppConfig) => {
-    setState((prev) => ({
-      ...prev,
-      config: {
+  const saveConfig = useCallback(
+    async (
+      nextConfig: AppConfig
+    ): Promise<{ ok: boolean; syncedToCloud: boolean; error?: string }> => {
+      const stamped: AppConfig = {
         ...nextConfig,
         updatedAt: Date.now(),
-      },
-    }));
-  }, []);
+      };
+      setState((prev) => ({
+        ...prev,
+        config: stamped,
+      }));
 
-  const importConfig = useCallback((incoming: Partial<AppConfig>) => {
-    setState((prev) => ({
-      ...prev,
-      config: mergeConfig(prev.config, incoming),
-    }));
-  }, []);
+      if (!isAdminVerified) {
+        return { ok: true, syncedToCloud: false, error: 'not-admin-auth' };
+      }
 
-  const resetConfigToDefaults = useCallback(() => {
-    setState((prev) => ({ ...prev, config: DEFAULT_CONFIG }));
-  }, []);
+      const cloudRes = await publishAppConfigToCloud(stamped);
+      if (cloudRes.ok && cloudRes.updatedAt) {
+        setState((prev) => ({
+          ...prev,
+          config: {
+            ...prev.config,
+            updatedAt: cloudRes.updatedAt,
+          },
+        }));
+      }
+      return {
+        ok: true,
+        syncedToCloud: cloudRes.ok,
+        error: cloudRes.error,
+      };
+    },
+    [isAdminVerified]
+  );
+
+  const importConfig = useCallback(
+    async (incoming: Partial<AppConfig>) => {
+      const merged = {
+        ...mergeConfig(stateRef.current.config, incoming),
+        updatedAt: Date.now(),
+      };
+      setState((prev) => ({
+        ...prev,
+        config: merged,
+      }));
+      if (isAdminVerified) {
+        await publishAppConfigToCloud(merged);
+      }
+    },
+    [isAdminVerified]
+  );
+
+  const resetConfigToDefaults = useCallback(async () => {
+    const resetCfg: AppConfig = {
+      ...DEFAULT_CONFIG,
+      updatedAt: Date.now(),
+    };
+    setState((prev) => ({ ...prev, config: resetCfg }));
+    if (isAdminVerified) {
+      await publishAppConfigToCloud(resetCfg);
+    }
+  }, [isAdminVerified]);
+
+  // Merge cloudUsers (all devices) + local state.users so Developer always sees everyone
+  const allKnownUsers: UserAccount[] = useMemo(() => {
+    const mergedMap = new Map<string, UserAccount>();
+    for (const u of Object.values(state.users)) {
+      mergedMap.set(u.id, u);
+    }
+    for (const cu of cloudUsers) {
+      const localMatch = mergedMap.get(cu.id);
+      if (!localMatch || (cu.updatedAt || 0) >= (localMatch.updatedAt || 0)) {
+        mergedMap.set(cu.id, {
+          ...localMatch,
+          ...cu,
+          pin: localMatch?.pin || '',
+        });
+      }
+    }
+    return Array.from(mergedMap.values());
+  }, [state.users, cloudUsers]);
 
   const stats = useMemo(() => {
     const completedSet = new Set(completedDays.filter((d) => d >= 1 && d <= totalDays));
@@ -546,6 +819,10 @@ export function useAppState() {
   return {
     state,
     activeUser,
+    adminUser,
+    isAdminVerified,
+    allKnownUsers,
+    cloudUsersCount: cloudUsers.length,
     userStartDate,
     lentEndDate,
     totalDays,
@@ -560,6 +837,8 @@ export function useAppState() {
     registerUser,
     loginUser,
     logoutUser,
+    signInDeveloperGoogle: signInDeveloperWithGoogle,
+    signOutDeveloperGoogle,
     toggleLang,
     toggleTheme,
     setCurrentDay,
