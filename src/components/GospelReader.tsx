@@ -5,6 +5,8 @@ import {
   BookOpen,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   HelpCircle,
   Lock,
   Minus,
@@ -78,6 +80,14 @@ export const GospelReader: React.FC<GospelReaderProps> = ({
   const [selectedChapter, setSelectedChapter] = useState<number>(1);
   const [selectedVerseKey, setSelectedVerseKey] = useState<string | null>(null);
   const [wrongChoiceByChapter, setWrongChoiceByChapter] = useState<Record<string, number | null>>({});
+  const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>({});
+
+  const toggleChapterExpanded = (chKey: string) => {
+    setExpandedChapters((prev) => ({
+      ...prev,
+      [chKey]: !prev[chKey],
+    }));
+  };
 
   const loadDataset = async (targetLang: Language) => {
     if (datasets[targetLang]) {
@@ -133,7 +143,12 @@ export const GospelReader: React.FC<GospelReaderProps> = ({
       const plan = getDayPlan(currentDay, readingPlan);
       const match = plan.readings.find((r) => r.book === tab);
       const candidate = match ? match.chapter : 1;
-      setSelectedChapter(isChapterUnlocked(tab, candidate) ? candidate : 1);
+      const resolvedChapter = isChapterUnlocked(tab, candidate) ? candidate : 1;
+      setSelectedChapter(resolvedChapter);
+      setExpandedChapters((prev) => ({
+        ...prev,
+        [getChapterKey(tab, resolvedChapter)]: true,
+      }));
       return;
     }
     setActiveTab(tab);
@@ -319,6 +334,10 @@ export const GospelReader: React.FC<GospelReaderProps> = ({
                       return;
                     }
                     setSelectedChapter(ch);
+                    setExpandedChapters((prev) => ({
+                      ...prev,
+                      [getChapterKey(activeTab, ch)]: true,
+                    }));
                   }}
                   className={`min-w-[36px] min-h-[36px] px-2 app-control text-xs font-bold tabular-nums transition-colors cursor-pointer flex items-center justify-center gap-1 ${
                     selectedChapter === ch
@@ -367,11 +386,12 @@ export const GospelReader: React.FC<GospelReaderProps> = ({
             </button>
           </div>
         ) : (
-          <div className="max-w-3xl mx-auto space-y-10">
+          <div className="max-w-3xl mx-auto space-y-4">
             {chaptersToRender.map((chBlock) => {
               const chKey = getChapterKey(chBlock.bookKey, chBlock.chapter);
               const chUnlocked = isChapterUnlocked(chBlock.bookKey, chBlock.chapter);
               const isChPassed = Boolean(passedChapters[chKey]);
+              const isExpanded = Boolean(expandedChapters[chKey]);
               const quiz = getChapterQuestion(chBlock.bookKey, chBlock.chapter);
               const wrongIdx = wrongChoiceByChapter[chKey] ?? null;
               const options = lang === 'ar' ? quiz.optionsAr : quiz.optionsEn;
@@ -387,10 +407,10 @@ export const GospelReader: React.FC<GospelReaderProps> = ({
                 return (
                   <article
                     key={chKey}
-                    className="app-card border border-dashed border-stone-300 dark:border-white/15 bg-stone-50/80 dark:bg-white/[0.02] p-6 sm:p-8 text-center space-y-3"
+                    className="app-card border border-dashed border-stone-300 dark:border-white/15 bg-stone-50/80 dark:bg-white/[0.02] p-5 sm:p-6 text-center space-y-2.5"
                   >
-                    <div className="w-11 h-11 mx-auto rounded-full bg-stone-200/80 dark:bg-white/10 text-stone-500 dark:text-stone-400 flex items-center justify-center">
-                      <Lock className="w-5 h-5" />
+                    <div className="w-10 h-10 mx-auto rounded-full bg-stone-200/80 dark:bg-white/10 text-stone-500 dark:text-stone-400 flex items-center justify-center">
+                      <Lock className="w-4 h-4" />
                     </div>
                     <h3 className="text-base sm:text-lg font-bold text-stone-800 dark:text-stone-100">
                       {chBlock.bookName} —{' '}
@@ -408,27 +428,74 @@ export const GospelReader: React.FC<GospelReaderProps> = ({
               }
 
               return (
-                <article key={chKey} className="space-y-6">
-                  <header className="pb-3 border-b border-stone-200 dark:border-white/10 flex items-baseline justify-between gap-3">
-                    <h3 className="text-lg sm:text-xl font-bold text-stone-900 dark:text-white">
-                      {chBlock.bookName} —{' '}
-                      <span className="text-[var(--accent)]">
-                        {lang === 'ar'
-                          ? `الأصحاح ${formatNumber(chBlock.chapter, 'ar')}`
-                          : `Chapter ${chBlock.chapter}`}
-                      </span>
-                    </h3>
-                    <span className="text-xs text-stone-500 dark:text-stone-400 tabular-nums">
-                      {lang === 'ar'
-                        ? `${formatNumber(chBlock.verses.length, 'ar')} آية`
-                        : `${chBlock.verses.length} verses`}
-                    </span>
-                  </header>
-
-                  <div
-                    className="font-scripture text-stone-900 dark:text-stone-100 leading-[2.15] space-y-2.5 select-text"
-                    style={{ fontSize: `${fontSize}px` }}
+                <article
+                  key={chKey}
+                  className={`app-card border transition-colors ${
+                    isExpanded
+                      ? 'border-[var(--accent)]/40 bg-stone-50/30 dark:bg-white/[0.015]'
+                      : 'border-stone-200 dark:border-white/10 bg-stone-50/60 dark:bg-white/[0.02]'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleChapterExpanded(chKey)}
+                    aria-expanded={isExpanded}
+                    className="w-full px-4 py-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-3 text-start hover:bg-stone-100/70 dark:hover:bg-white/[0.04] transition-colors cursor-pointer"
                   >
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                      <span
+                        className={`inline-flex items-center justify-center w-8 h-8 rounded-lg shrink-0 transition-colors ${
+                          isExpanded
+                            ? 'bg-[var(--accent)] text-white'
+                            : 'bg-[var(--accent-soft)] text-[var(--accent)]'
+                        }`}
+                      >
+                        <ChevronDown
+                          className={`w-4 h-4 transition-transform duration-200 ${
+                            isExpanded ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </span>
+                      <h3 className="text-base sm:text-lg font-bold text-stone-900 dark:text-white">
+                        {chBlock.bookName} —{' '}
+                        <span className="text-[var(--accent)]">
+                          {lang === 'ar'
+                            ? `الأصحاح ${formatNumber(chBlock.chapter, 'ar')}`
+                            : `Chapter ${chBlock.chapter}`}
+                        </span>
+                      </h3>
+                      {isChPassed && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold">
+                          <Check className="w-3 h-3" />
+                          {lang === 'ar' ? 'تمت الإجابة' : 'Done'}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs text-stone-500 dark:text-stone-400 tabular-nums">
+                        {lang === 'ar'
+                          ? `${formatNumber(chBlock.verses.length, 'ar')} آية`
+                          : `${chBlock.verses.length} verses`}
+                      </span>
+                      <span className="hidden sm:inline-block text-[11px] font-semibold text-[var(--accent)]">
+                        {isExpanded
+                          ? lang === 'ar'
+                            ? 'إغلاق'
+                            : 'Close'
+                          : lang === 'ar'
+                          ? 'فتح'
+                          : 'Open'}
+                      </span>
+                    </div>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="px-4 pb-5 pt-2 sm:px-6 sm:pb-6 space-y-6 border-t border-stone-200/80 dark:border-white/10">
+                      <div
+                        className="font-scripture text-stone-900 dark:text-stone-100 leading-[2.15] space-y-2.5 select-text pt-2"
+                        style={{ fontSize: `${fontSize}px` }}
+                      >
                     {chBlock.verses.map((verseText, vIdx) => {
                       const verseNum = vIdx + 1;
                       const vKey = `${chBlock.bookKey}-${chBlock.chapter}-${verseNum}`;
@@ -569,7 +636,13 @@ export const GospelReader: React.FC<GospelReaderProps> = ({
                         {activeTab !== 'today' && nextIsUnlockedInSameBook && nextRef && (
                           <button
                             type="button"
-                            onClick={() => setSelectedChapter(nextRef.chapter)}
+                            onClick={() => {
+                              setSelectedChapter(nextRef.chapter);
+                              setExpandedChapters((prev) => ({
+                                ...prev,
+                                [getChapterKey(nextRef.book, nextRef.chapter)]: true,
+                              }));
+                            }}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 app-control bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer transition-colors"
                           >
                             <span>
@@ -583,6 +656,24 @@ export const GospelReader: React.FC<GospelReaderProps> = ({
                       </div>
                     )}
                   </div>
+
+                      {/* Bottom Collapse Button so user doesn't have to scroll back up */}
+                      <div className="flex justify-center pt-1">
+                        <button
+                          type="button"
+                          onClick={() => toggleChapterExpanded(chKey)}
+                          className="min-h-[40px] px-4 py-2 app-control border border-stone-200 dark:border-white/15 bg-white dark:bg-[#22191C] hover:bg-stone-100 dark:hover:bg-white/10 text-xs font-bold text-stone-700 dark:text-stone-200 flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <ChevronUp className="w-4 h-4 text-[var(--accent)]" />
+                          <span>
+                            {lang === 'ar'
+                              ? `إغلاق الأصحاح ${formatNumber(chBlock.chapter, 'ar')}`
+                              : `Collapse Chapter ${chBlock.chapter}`}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </article>
               );
             })}
