@@ -35,16 +35,17 @@ function formatShortMonthDay(dateStr: string, lang: Language): string {
 
 /**
  * Computes a gentle hillside road point (x, y) for normalized progress t in [0, 1].
- * In Arabic (RTL), the journey starts on the right (x=705) and moves left toward Bethlehem (x=110).
- * In English (LTR), the journey starts on the left (x=95) and moves right toward Bethlehem (x=690).
+ * ViewBox is 560x250 so the full scene fits cleanly on mobile phones without horizontal slicing.
+ * In Arabic (RTL), the journey starts on the right (x=492) and moves left toward Bethlehem (x=104).
+ * In English (LTR), the journey starts on the left (x=68) and moves right toward Bethlehem (x=456).
  */
 function getRoadPoint(t: number, isRtl: boolean): { x: number; y: number } {
   const clamped = Math.max(0, Math.min(1, t));
-  const startX = isRtl ? 705 : 95;
-  const endX = isRtl ? 128 : 672;
+  const startX = isRtl ? 492 : 68;
+  const endX = isRtl ? 104 : 456;
   const x = startX + (endX - startX) * clamped;
   // Gentle rolling desert hill undulation
-  const y = 168 - Math.sin(clamped * Math.PI * 2.2) * 8 - clamped * 8;
+  const y = 196 - Math.sin(clamped * Math.PI * 2.2) * 8 - clamped * 8;
   return { x, y };
 }
 
@@ -123,17 +124,17 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
   }, [isRtl, fastTotalDays, journeyCompletedDays, activeFastMarkerDay, fastTodayDay]);
 
   // Travelers stop just at the entrance of Bethlehem right before full arrival, then enter Bethlehem on arrival
-  const travelerT = hasArrived ? 0.96 : progressRatio * 0.93;
+  const travelerT = hasArrived ? 0.96 : progressRatio * 0.92;
   const travelerPos = getRoadPoint(travelerT, isRtl);
-  const bethlehemX = isRtl ? 78 : 722;
-  const startX = isRtl ? 705 : 95;
+  const bethlehemX = isRtl ? 72 : 488;
+  const startX = isRtl ? 496 : 64;
   const startDateShort = formatShortMonthDay(fastStart, lang);
   const endDateShort = formatShortMonthDay(fastEnd, lang);
 
   const containerWidthClass =
     size === 'sm' ? 'max-w-xl' : size === 'lg' ? 'max-w-4xl' : 'max-w-3xl';
-  const svgHeightClass =
-    size === 'sm' ? 'h-40 sm:h-44' : size === 'lg' ? 'h-52 sm:h-60' : 'h-44 sm:h-52';
+  const svgMaxHeightClass =
+    size === 'sm' ? 'max-h-56 sm:max-h-60' : size === 'lg' ? 'max-h-64 sm:max-h-80' : 'max-h-60 sm:max-h-72';
 
   // Palette adapting gracefully to Dark / Light theme
   const skyTop = isDark ? '#1A1014' : '#FDF6EC';
@@ -152,12 +153,12 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
     <div className={`w-full ${containerWidthClass} mx-auto pt-2`}>
       <div className="app-card border border-stone-200 dark:border-white/10 bg-white dark:bg-[#22191C] overflow-hidden shadow-sm">
         {/* Top Journey Status Bar */}
-        <div className="px-4 py-3 border-b border-stone-200/80 dark:border-white/10 flex flex-wrap items-center justify-between gap-2 bg-stone-50/70 dark:bg-white/[0.02]">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
+        <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 border-b border-stone-200/80 dark:border-white/10 flex flex-wrap items-center justify-between gap-2 bg-stone-50/70 dark:bg-white/[0.02]">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="inline-flex items-center justify-center w-6 h-6 shrink-0 rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
               <Sparkles className="w-3.5 h-3.5" />
             </span>
-            <span className="text-xs sm:text-sm font-bold text-stone-900 dark:text-white">
+            <span className="text-xs sm:text-sm font-bold text-stone-900 dark:text-white leading-snug">
               {hasArrived
                 ? isRtl
                   ? 'وصلت الأسرة إلى بيت لحم — وُلِدَ المخلّص!'
@@ -180,12 +181,12 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
           </div>
         </div>
 
-        {/* Panoramic Illustrated Road to Bethlehem */}
-        <div className="relative w-full">
+        {/* Panoramic Illustrated Road to Bethlehem (full scene visible on all screen widths) */}
+        <div className="relative w-full overflow-hidden" style={{ backgroundColor: skyBottom }}>
           <svg
-            viewBox="0 0 800 220"
-            className={`w-full ${svgHeightClass} block select-none`}
-            preserveAspectRatio="xMidYMid slice"
+            viewBox="0 0 560 250"
+            className={`w-full h-auto ${svgMaxHeightClass} block select-none`}
+            preserveAspectRatio="xMidYMid meet"
             role="img"
             aria-label={
               isRtl
@@ -218,20 +219,20 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
             </defs>
 
             {/* Sky Background */}
-            <rect x="0" y="0" width="800" height="220" fill={`url(#sky-${uid})`} />
+            <rect x="0" y="0" width="560" height="250" fill={`url(#sky-${uid})`} />
 
             {/* Subtle Night/Dawn Stars */}
             {[
-              [145, 30, 1.5],
-              [230, 52, 1.2],
-              [310, 24, 1.8],
-              [395, 44, 1.3],
-              [485, 28, 1.6],
-              [565, 55, 1.2],
-              [645, 34, 1.5],
-              [735, 48, 1.4],
-              [275, 75, 1.1],
-              [520, 72, 1.1],
+              [105, 32, 1.5],
+              [165, 56, 1.3],
+              [220, 26, 1.8],
+              [282, 48, 1.4],
+              [340, 28, 1.7],
+              [395, 58, 1.3],
+              [445, 34, 1.6],
+              [510, 50, 1.4],
+              [195, 82, 1.1],
+              [365, 78, 1.2],
             ].map(([sx, sy, sr], idx) => (
               <circle
                 key={idx}
@@ -247,7 +248,7 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
             <g transform={`translate(${bethlehemX}, 44)`}>
               {/* Beam down to the Manger Cave */}
               <polygon
-                points="0,6 -42,135 42,135"
+                points="0,6 -42,155 42,155"
                 fill={`url(#starRay-${uid})`}
               />
               <circle cx="0" cy="0" r={hasArrived ? 42 : 30} fill={`url(#starGlow-${uid})`} />
@@ -267,24 +268,24 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
 
             {/* Distant Judean Hills */}
             <path
-              d="M0 158 Q 140 112 280 144 T 560 136 T 800 150 L 800 220 L 0 220 Z"
+              d="M0 176 Q 100 132 200 162 T 395 154 T 560 168 L 560 250 L 0 250 Z"
               fill={hillBack}
             />
             <path
-              d="M0 176 Q 170 146 360 168 T 680 156 T 800 170 L 800 220 L 0 220 Z"
+              d="M0 198 Q 120 170 250 190 T 470 180 T 560 192 L 560 250 L 0 250 Z"
               fill={hillMid}
             />
 
             {/* Snow-dusted Christmas Pine Trees along the Hills */}
             {christmasTheme && (
-              <g opacity={isDark ? 0.78 : 0.72}>
+              <g opacity={isDark ? 0.82 : 0.75}>
                 {[
-                  [185, 149, 0.75],
-                  [205, 152, 0.55],
-                  [355, 154, 0.7],
-                  [485, 146, 0.8],
-                  [505, 150, 0.58],
-                  [620, 154, 0.72],
+                  [138, 168, 0.78],
+                  [158, 172, 0.58],
+                  [255, 174, 0.72],
+                  [345, 166, 0.82],
+                  [365, 171, 0.6],
+                  [432, 172, 0.74],
                 ].map(([tx, ty, sc], idx) => (
                   <g key={idx} transform={`translate(${tx}, ${ty}) scale(${sc})`}>
                     <rect x="-2" y="-3" width="4" height="7" fill="#78350F" />
@@ -304,7 +305,7 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
             )}
 
             {/* Starting Town Marker (Nazareth) */}
-            <g transform={`translate(${startX}, 168)`} opacity="0.72">
+            <g transform={`translate(${startX}, 196)`} opacity="0.78">
               <rect x="-16" y="-22" width="14" height="20" rx="1.5" fill={caveOuter} />
               <rect x="0" y="-16" width="12" height="14" rx="1.5" fill={caveOuter} />
               <path d="M-16 -22 Q -9 -28 -2 -22" fill={caveOuter} />
@@ -312,11 +313,11 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
             </g>
 
             {/* Bethlehem Town & Nativity Cave at Destination */}
-            <g transform={`translate(${bethlehemX}, 166)`}>
+            <g transform={`translate(${bethlehemX}, 194)`}>
               {/* Distant Bethlehem rooftops */}
-              <rect x="-42" y="-36" width="18" height="32" rx="2" fill={caveOuter} opacity="0.75" />
-              <path d="M-42 -36 Q -33 -44 -24 -36" fill={caveOuter} opacity="0.85" />
-              <rect x="24" y="-32" width="16" height="28" rx="2" fill={caveOuter} opacity="0.75" />
+              <rect x="-40" y="-36" width="17" height="32" rx="2" fill={caveOuter} opacity="0.75" />
+              <path d="M-40 -36 Q -31.5 -44 -23 -36" fill={caveOuter} opacity="0.85" />
+              <rect x="23" y="-32" width="15" height="28" rx="2" fill={caveOuter} opacity="0.75" />
 
               {/* Humble Cave / Stable Arch */}
               <path
@@ -334,7 +335,7 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
                 rx="18"
                 ry="12"
                 fill="#F59E0B"
-                opacity={hasArrived ? 0.34 : 0.12}
+                opacity={hasArrived ? 0.34 : 0.14}
               />
 
               {/* Manger / Crib: Empty before Day 43, Newborn Christ inside ONLY upon arrival! */}
@@ -387,7 +388,7 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
               d={roadPathD}
               fill="none"
               stroke={roadTrack}
-              strokeWidth="4"
+              strokeWidth="4.2"
               strokeLinecap="round"
               strokeDasharray="6 6"
             />
@@ -398,7 +399,7 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
               pathLength={100}
               fill="none"
               stroke="var(--accent)"
-              strokeWidth="4.5"
+              strokeWidth="4.8"
               strokeLinecap="round"
               strokeDasharray="100"
               strokeDashoffset={100 - progressRatio * 100}
@@ -413,7 +414,7 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
                   key={m.dayNum}
                   cx={m.x}
                   cy={m.y}
-                  r={m.isCurrent ? 3.8 : isWeekStop ? 2.7 : 1.7}
+                  r={m.isCurrent ? 3.8 : isWeekStop ? 2.6 : 1.6}
                   fill={
                     m.done
                       ? 'var(--accent)'
@@ -443,10 +444,10 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
                   transition: 'transform 650ms cubic-bezier(0.22, 1, 0.36, 1)',
                 }}
               >
-                {/* Mirror travelers horizontally so they always face toward Bethlehem */}
-                <g transform={isRtl ? 'scale(-1, 1)' : undefined}>
+                {/* Mirror travelers horizontally so they always face toward Bethlehem, and scale cleanly for mobile visibility */}
+                <g transform={isRtl ? 'scale(-1.22, 1.22)' : 'scale(1.22)'}>
                   {/* Soft warm lantern illumination ahead on the road */}
-                  <circle cx="24" cy="-18" r="24" fill={`url(#lanternGlow-${uid})`} />
+                  <circle cx="24" cy="-18" r="26" fill={`url(#lanternGlow-${uid})`} />
 
                   {/* Ground shadow */}
                   <ellipse cx="-2" cy="3" rx="26" ry="3.5" fill="rgba(0,0,0,0.22)" />
@@ -463,7 +464,7 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
                     {/* Donkey body */}
                     <ellipse cx="-1" cy="-12" rx="13" ry="6.5" fill={donkeyColor} />
                     {/* Saddle blanket in accent color */}
-                    <path d="M-8 -18 Q 0 -19 6 -17 L 5 -10 L -7 -10 Z" fill="var(--accent)" opacity="0.85" />
+                    <path d="M-8 -18 Q 0 -19 6 -17 L 5 -10 L -7 -10 Z" fill="var(--accent)" opacity="0.88" />
                     {/* Donkey neck & head */}
                     <path d="M9 -14 L 16 -23 L 22 -20 L 20 -16 L 13 -11 Z" fill={donkeyColor} />
                     {/* Donkey ears */}
@@ -474,7 +475,7 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
                   {/* St. Mary riding calmly on the donkey (NO infant Jesus yet!) */}
                   <g transform="translate(-9, -16)">
                     {/* Soft golden halo */}
-                    <circle cx="0" cy="-22" r="6" fill="none" stroke="#FBBF24" strokeWidth="1.1" opacity="0.9" />
+                    <circle cx="0" cy="-22" r="6" fill="none" stroke="#FBBF24" strokeWidth="1.2" opacity="0.95" />
                     {/* Robe & draped mantle */}
                     <path d="M-6 2 C -6 -9, -4 -17, 0 -18 C 5 -17, 6 -8, 6 2 Z" fill={maryRobe} />
                     <path d="M-4 -18 Q 1 -22 5 -16 L 3 -3 L -4 -4 Z" fill={maryMantle} />
@@ -487,13 +488,13 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
                   {/* St. Joseph walking ahead with staff & lantern */}
                   <g transform="translate(17, 0)">
                     {/* Soft golden halo */}
-                    <circle cx="0" cy="-35" r="6" fill="none" stroke="#FBBF24" strokeWidth="1" opacity="0.85" />
+                    <circle cx="0" cy="-35" r="6" fill="none" stroke="#FBBF24" strokeWidth="1.1" opacity="0.9" />
                     {/* Walking legs */}
                     <line x1="-2" y1="-10" x2="-5" y2="2" stroke="#78350F" strokeWidth="2.5" strokeLinecap="round" />
                     <line x1="2" y1="-10" x2="5" y2="2" stroke="#78350F" strokeWidth="2.5" strokeLinecap="round" />
                     {/* Tunic & traveler cloak */}
                     <path d="M-5 -8 L -4 -29 L 4 -29 L 5 -8 Z" fill={josephCloak} />
-                    <path d="M-5 -28 Q 0 -31 5 -26 L 3 -14 L -5 -16 Z" fill="#D97706" opacity="0.85" />
+                    <path d="M-5 -28 Q 0 -31 5 -26 L 3 -14 L -5 -16 Z" fill="#D97706" opacity="0.88" />
                     {/* Head & beard */}
                     <circle cx="0.5" cy="-34" r="3.4" fill="#E6BE9A" />
                     <path d="M-1.5 -32 Q 1 -28.5 3.5 -32" fill="#6B4F3A" />
@@ -512,12 +513,12 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
         </div>
 
         {/* Bottom Route Landmarks & Caption */}
-        <div className="px-4 py-3 border-t border-stone-200/80 dark:border-white/10 flex flex-col gap-1.5 bg-stone-50/50 dark:bg-white/[0.015]">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] sm:text-xs font-semibold text-stone-500 dark:text-stone-400">
+        <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 border-t border-stone-200/80 dark:border-white/10 flex flex-col gap-1.5 bg-stone-50/50 dark:bg-white/[0.015]">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[11px] sm:text-xs font-semibold text-stone-500 dark:text-stone-400">
             <span>
               {isRtl ? `الناصرة · ${startDateShort}` : `Nazareth · ${startDateShort}`}
             </span>
-            <span className="text-[var(--accent)] font-bold tabular-nums">
+            <span className="text-[var(--accent)] font-bold tabular-nums text-center">
               {hasArrived
                 ? isRtl
                   ? 'اكتمل الطريق في بيت لحم!'
