@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { AdminPanel } from './components/AdminPanel';
 import { AuthGate } from './components/AuthGate';
 import { BethlehemJourney } from './components/BethlehemJourney';
+import { ChristmasAtmosphere } from './components/ChristmasAtmosphere';
 import { GospelReader } from './components/GospelReader';
 import { Header } from './components/Header';
 import { HeroSymbol } from './components/HeroSymbol';
@@ -113,19 +114,24 @@ export default function App() {
   const weekPractices = state.config.practices.filter((p) => p.week === dayPlan.week);
   const isDayCompleted = completedDays.includes(currentDay);
   const existingUsersList = Object.values(state.users);
+  const christmasEnabled = state.config.christmasTheme !== false;
 
   return (
     <>
+      <ChristmasAtmosphere enabled={christmasEnabled} theme={state.theme} />
+
       {!activeUser ? (
         <AuthGate
           lang={state.lang}
           theme={state.theme}
+          christmasTheme={christmasEnabled}
           familyName={copy.familyName}
           heroTitle={copy.heroTitle}
           authWelcomeTitle={copy.authWelcomeTitle}
           authWelcomeSubtitle={copy.authWelcomeSubtitle}
           logoDataUrl={state.config.logoDataUrl}
           heroIcon={state.config.heroIcon}
+          lentStartDate={state.config.lentStartDate}
           lentEndDate={lentEndDate}
           existingUsers={existingUsersList}
           onToggleLang={toggleLang}
@@ -135,11 +141,12 @@ export default function App() {
           onLogin={loginUser}
         />
       ) : (
-        <div className="min-h-screen flex flex-col">
+        <div className="min-h-screen flex flex-col relative z-10">
           {/* 1. Header & Branding */}
           <Header
             lang={state.lang}
             theme={state.theme}
+            christmasTheme={christmasEnabled}
             familyName={copy.familyName}
             userName={activeUser.fullName}
             logoDataUrl={state.config.logoDataUrl}
@@ -173,8 +180,12 @@ export default function App() {
                   totalDays={totalDays}
                   percent={stats.percent}
                   currentDay={currentDay}
+                  lentStartDate={state.config.lentStartDate}
+                  lentEndDate={lentEndDate}
+                  userStartDate={userStartDate}
                   lang={state.lang}
                   theme={state.theme}
+                  christmasTheme={christmasEnabled}
                   size={state.config.heroIconSize || 'md'}
                   caption={copy.heartProgressCaption}
                 />
@@ -207,6 +218,7 @@ export default function App() {
               readingPlan={readingPlan}
               completedDays={completedDays}
               planStartDate={userStartDate}
+              lentEndDate={lentEndDate}
               stats={stats}
               maxUnlockedDay={maxUnlockedDay}
               sequentialLock={state.config.sequentialLock}

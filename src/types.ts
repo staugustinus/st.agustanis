@@ -90,9 +90,11 @@ export interface AppConfig {
   progressStyle?: ProgressStyle;
   journeyMigrated?: boolean;
   updatedAt?: number;
-  lentStartDate: string; // YYYY-MM-DD
+  lentStartDate: string; // YYYY-MM-DD (default 2026-11-25)
   lentEndDate: string; // YYYY-MM-DD (default 2027-01-06)
+  startNov25Migrated?: boolean;
   sequentialLock: boolean;
+  christmasTheme?: boolean;
   adminPinEnabled: boolean;
   adminPin: string;
   pin2027Migrated?: boolean;

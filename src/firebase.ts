@@ -219,6 +219,7 @@ export async function publishAppConfigToCloud(
     lentStartDate: config.lentStartDate || getTodayDateString(),
     lentEndDate: config.lentEndDate || DEFAULT_COMPETITION_END_DATE,
     sequentialLock: Boolean(config.sequentialLock),
+    christmasTheme: config.christmasTheme !== false,
     copy: config.copy,
     quotes: (config.quotes || []).slice(0, 60),
     practices: (config.practices || []).slice(0, 100),
@@ -383,7 +384,15 @@ export async function syncParticipantProgressToCloud(
       return;
     }
 
-    await updateDoc(ref, {
+    const existingData = existingSnap.data() as {
+      completedDays?: unknown[];
+      planStartDate?: string;
+    };
+    const existingCompletedCount = Array.isArray(existingData?.completedDays)
+      ? existingData.completedDays.length
+      : 0;
+
+    const updatePayload: Record<string, unknown> = {
       currentDay: Math.max(1, Math.min(200, user.currentDay || 1)),
       completedDays: (user.completedDays || [])
         .filter((d) => typeof d === 'number' && Number.isFinite(d))
@@ -395,7 +404,18 @@ export async function syncParticipantProgressToCloud(
       percent: metrics.percent,
       streak: metrics.streak,
       updatedAt: now,
-    });
+    };
+
+    if (
+      existingCompletedCount === 0 &&
+      (user.completedDays || []).length === 0 &&
+      user.planStartDate &&
+      existingData?.planStartDate !== user.planStartDate
+    ) {
+      updatePayload.planStartDate = user.planStartDate.slice(0, 20);
+    }
+
+    await updateDoc(ref, updatePayload);
   } catch (err: unknown) {
     handleFirestoreError(err, OperationType.UPDATE, `participants/${docId}`);
   }

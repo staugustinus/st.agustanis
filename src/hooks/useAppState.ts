@@ -6,10 +6,12 @@ import {
   computeMaxUnlockedDay,
   computeSuggestedDay,
   DEFAULT_COMPETITION_END_DATE,
+  DEFAULT_COMPETITION_START_DATE,
   getChapterDay,
   getChapterKey,
   getDayPlan,
   getDaysBetweenInclusive,
+  getEffectiveStartDate,
   getPreviousChapter,
   getTodayDateString,
   TOTAL_GOSPEL_CHAPTERS,
@@ -38,9 +40,19 @@ function mergeConfig(
   base: AppConfig,
   incoming?: Partial<AppConfig> | null
 ): AppConfig {
-  if (!incoming) return { ...base, pin2027Migrated: true, journeyMigrated: true };
+  if (!incoming) {
+    return {
+      ...base,
+      pin2027Migrated: true,
+      journeyMigrated: true,
+      startNov25Migrated: true,
+    };
+  }
   const rawPin = incoming.adminPin ? normalizeDigits(incoming.adminPin).replace(/\s+/g, '') : '';
   const needs2027Upgrade = !incoming.pin2027Migrated && (!rawPin || rawPin === '1234');
+  const needsNov25Start =
+    !incoming.startNov25Migrated &&
+    (!incoming.lentStartDate || incoming.lentStartDate === '2026-11-26');
   const oldArCaption = 'يمتلئ القلب تدريجياً حتى يكتمل في نهاية الصوم';
   const oldEnCaption = 'The heart fills day by day until Lent is complete';
   const nextArCopy = { ...base.copy.ar, ...(incoming.copy?.ar || {}) };
@@ -56,6 +68,11 @@ function mergeConfig(
   return {
     ...base,
     ...incoming,
+    lentStartDate: needsNov25Start
+      ? DEFAULT_COMPETITION_START_DATE
+      : incoming.lentStartDate || DEFAULT_COMPETITION_START_DATE,
+    startNov25Migrated: true,
+    christmasTheme: incoming.christmasTheme !== undefined ? incoming.christmasTheme : true,
     progressStyle: !incoming.journeyMigrated ? 'journey' : incoming.progressStyle || 'journey',
     journeyMigrated: true,
     adminPinEnabled: true,
@@ -295,6 +312,7 @@ export function useAppState() {
     root.style.setProperty('--radius-card', cardRadius);
     root.style.setProperty('--radius-control', controlRadius);
     root.setAttribute('data-card-style', cardStyle || 'bordered');
+    root.setAttribute('data-christmas', state.config.christmasTheme !== false ? 'true' : 'false');
 
     const metaTheme = document.querySelector('meta[name="theme-color"]');
     if (metaTheme) {
@@ -318,13 +336,26 @@ export function useAppState() {
         (activeUser.pin ? await hashParticipantPin(nameKey, activeUser.pin) : '');
       if (!pinHash) return;
 
+      const hasStarted =
+        (activeUser.completedDays?.length || 0) > 0 ||
+        Object.values(activeUser.passedChapters || {}).some(Boolean);
+      const effectiveStart = getEffectiveStartDate(stateRef.current.config.lentStartDate);
+      const nextPlanStartDate = !hasStarted
+        ? effectiveStart
+        : activeUser.planStartDate || effectiveStart;
+
       const enriched: UserAccount = {
         ...activeUser,
         cloudId: docId,
         pinHash,
+        planStartDate: nextPlanStartDate,
       };
 
-      if (!activeUser.cloudId || !activeUser.pinHash) {
+      if (
+        !activeUser.cloudId ||
+        !activeUser.pinHash ||
+        activeUser.planStartDate !== nextPlanStartDate
+      ) {
         setState((prev) => {
           if (!prev.users[activeUser.id]) return prev;
           return {
@@ -335,6 +366,7 @@ export function useAppState() {
                 ...prev.users[activeUser.id],
                 cloudId: docId,
                 pinHash,
+                planStartDate: nextPlanStartDate,
               },
             },
           };
@@ -400,6 +432,7 @@ export function useAppState() {
 
       const pinHash = await hashParticipantPin(id, cleanPin);
       const nowIso = new Date().toISOString();
+      const effectiveStart = getEffectiveStartDate(stateRef.current.config.lentStartDate);
       const newUser: UserAccount = {
         id,
         cloudId: cloudLookup.docId,
@@ -411,7 +444,7 @@ export function useAppState() {
         passedChapters: {},
         checkedPractices: {},
         readerFontSize: 21,
-        planStartDate: getTodayDateString(),
+        planStartDate: effectiveStart,
         createdAt: nowIso,
         updatedAt: Date.now(),
       };

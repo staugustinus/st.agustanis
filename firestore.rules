@@ -40,9 +40,10 @@ service cloud.firestore {
           'logoDataUrl', 'accentColor', 'lightCanvasColor', 'darkCanvasColor',
           'radiusPreset', 'cardStyle', 'heroIcon', 'heroIconSize',
           'progressStyle', 'journeyMigrated', 'pin2027Migrated',
-          'lentStartDate', 'lentEndDate', 'sequentialLock',
+          'lentStartDate', 'lentEndDate', 'sequentialLock', 'christmasTheme',
           'copy', 'quotes', 'practices', 'updatedAt', 'updatedBy'
         ])
+        && (!('christmasTheme' in data) || data.christmasTheme is bool)
         && data.logoDataUrl is string && data.logoDataUrl.size() <= 220000
         && data.accentColor is string && data.accentColor.size() <= 20
         && data.lightCanvasColor is string && data.lightCanvasColor.size() <= 20
@@ -116,8 +117,12 @@ service cloud.firestore {
             && incoming().pinHash == existing().pinHash
             && incoming().diff(existing()).affectedKeys().hasOnly([
               'currentDay', 'completedDays', 'passedChapters', 'checkedPractices',
-              'readerFontSize', 'completedChapters', 'percent', 'streak', 'updatedAt'
+              'readerFontSize', 'planStartDate', 'completedChapters', 'percent', 'streak', 'updatedAt'
             ])
+            && (
+              !incoming().diff(existing()).affectedKeys().hasAny(['planStartDate'])
+              || (existing().completedDays.size() == 0 && incoming().completedDays.size() == 0)
+            )
           )
         );
       allow delete: if isAdmin() && isValidId(participantId);

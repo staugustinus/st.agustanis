@@ -2,6 +2,7 @@ import type { ChapterRef, DayPlan, GospelKey } from '../types';
 
 export const TOTAL_LENT_DAYS = 43;
 export const TOTAL_GOSPEL_CHAPTERS = 89;
+export const DEFAULT_COMPETITION_START_DATE = '2026-11-25';
 export const DEFAULT_COMPETITION_END_DATE = '2027-01-06';
 
 export const GOSPEL_ORDER: {
@@ -93,6 +94,37 @@ export function getQuoteDayForPlanDay(day: number, totalDays: number): number {
   if (totalDays <= 1) return 43;
   const ratio = (day - 1) / (totalDays - 1);
   return Math.max(1, Math.min(43, Math.round(ratio * 42) + 1));
+}
+
+export function getEffectiveStartDate(competitionStartDate?: string): string {
+  const today = getTodayDateString();
+  if (!competitionStartDate) return today;
+  return today < competitionStartDate ? competitionStartDate : today;
+}
+
+export function getChapterPaceSummary(
+  totalDays: number,
+  lang: 'ar' | 'en'
+): { minPerDay: number; maxPerDay: number; label: string } {
+  const safeDays = Math.max(1, totalDays);
+  const plan = buildReadingPlan(safeDays);
+  const counts = plan.map((d) => d.readings.length);
+  const minPerDay = Math.min(...counts);
+  const maxPerDay = Math.max(...counts);
+
+  if (lang === 'ar') {
+    const label =
+      minPerDay === maxPerDay
+        ? `${formatNumber(minPerDay, 'ar')} ${minPerDay === 1 ? 'أصحاح' : minPerDay === 2 ? 'أصحاحين' : minPerDay <= 10 ? 'أصحاحات' : 'أصحاحاً'} يومياً`
+        : `${formatNumber(minPerDay, 'ar')}–${formatNumber(maxPerDay, 'ar')} أصحاحات يومياً`;
+    return { minPerDay, maxPerDay, label };
+  }
+
+  const label =
+    minPerDay === maxPerDay
+      ? `${minPerDay} ${minPerDay === 1 ? 'chapter' : 'chapters'}/day`
+      : `${minPerDay}–${maxPerDay} chapters/day`;
+  return { minPerDay, maxPerDay, label };
 }
 
 export function formatReadingRange(

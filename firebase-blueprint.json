@@ -58,6 +58,10 @@
         "sequentialLock": {
           "type": "boolean"
         },
+        "christmasTheme": {
+          "type": "boolean",
+          "description": "Enables falling snow, Christmas pine trees, garlands, and red-green-gold festive styling."
+        },
         "copy": {
           "type": "object",
           "description": "Arabic and English UI strings map."

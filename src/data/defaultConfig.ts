@@ -48,14 +48,6 @@ export const DEFAULT_COPY: CustomCopy = {
   },
 };
 
-function getDefaultLentStartDate(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
 export const DEFAULT_CONFIG: AppConfig = {
   logoDataUrl: null,
   accentColor: '#DC2626',
@@ -66,9 +58,10 @@ export const DEFAULT_CONFIG: AppConfig = {
   heroIcon: 'heart',
   heroIconSize: 'md',
   progressStyle: 'journey',
-  lentStartDate: getDefaultLentStartDate(),
+  lentStartDate: '2026-11-25',
   lentEndDate: '2027-01-06',
   sequentialLock: true,
+  christmasTheme: true,
   adminPinEnabled: true,
   adminPin: '2027',
   copy: DEFAULT_COPY,

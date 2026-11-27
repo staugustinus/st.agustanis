@@ -3,9 +3,12 @@ import { Eye, EyeOff, Globe, KeyRound, Lock, LogIn, Moon, Settings, Sun, UserChe
 import {
   formatDateReadable,
   formatNumber,
+  getChapterPaceSummary,
   getDaysBetweenInclusive,
+  getEffectiveStartDate,
   getTodayDateString,
   TOTAL_GOSPEL_CHAPTERS,
+  TOTAL_LENT_DAYS,
 } from '../data/readingPlan';
 import type { HeroIconKey, Language, ThemeMode, UserAccount } from '../types';
 import { isValidTripleName, normalizeDigits, normalizeNameKey } from '../utils/digits';
@@ -14,12 +17,14 @@ import { HeroSymbol } from './HeroSymbol';
 interface AuthGateProps {
   lang: Language;
   theme: ThemeMode;
+  christmasTheme: boolean;
   familyName: string;
   heroTitle: string;
   authWelcomeTitle: string;
   authWelcomeSubtitle: string;
   logoDataUrl: string | null;
   heroIcon: HeroIconKey;
+  lentStartDate: string;
   lentEndDate: string;
   existingUsers: UserAccount[];
   onToggleLang: () => void;
@@ -32,12 +37,14 @@ interface AuthGateProps {
 export const AuthGate: React.FC<AuthGateProps> = ({
   lang,
   theme,
+  christmasTheme,
   familyName,
   heroTitle,
   authWelcomeTitle,
   authWelcomeSubtitle,
   logoDataUrl,
   heroIcon,
+  lentStartDate,
   lentEndDate,
   existingUsers,
   onToggleLang,
@@ -99,7 +106,8 @@ export const AuthGate: React.FC<AuthGateProps> = ({
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col relative z-10">
+      {christmasTheme && <div aria-hidden="true" className="h-1 w-full xmas-tricolor-bar" />}
       {/* Compact Top Utilities */}
       <header className="max-w-5xl w-full mx-auto px-4 sm:px-6 pt-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -160,15 +168,34 @@ export const AuthGate: React.FC<AuthGateProps> = ({
             <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-300 leading-relaxed">
               {authWelcomeSubtitle}
             </p>
-            <p className="text-xs text-stone-500 dark:text-stone-400 tabular-nums pt-1">
-              {(() => {
-                const remDays = getDaysBetweenInclusive(getTodayDateString(), lentEndDate);
-                const endLabel = formatDateReadable(lentEndDate, lang);
-                return lang === 'ar'
-                  ? `نهاية المسابقة: ${endLabel} · باقي ${formatNumber(remDays, 'ar')} يوماً (${formatNumber(TOTAL_GOSPEL_CHAPTERS, 'ar')} أصحاحاً)`
-                  : `Ends: ${endLabel} · ${remDays} days remaining (${TOTAL_GOSPEL_CHAPTERS} chapters)`;
-              })()}
-            </p>
+            {(() => {
+              const effectiveStart = getEffectiveStartDate(lentStartDate);
+              const remDays = getDaysBetweenInclusive(effectiveStart, lentEndDate);
+              const pace = getChapterPaceSummary(remDays, lang);
+              const endLabel = formatDateReadable(lentEndDate, lang);
+              const isLate = getTodayDateString() > lentStartDate || remDays < TOTAL_LENT_DAYS;
+              return (
+                <div className="mt-2 p-3 app-control border border-[var(--accent)]/25 bg-[var(--accent-soft)]/45 text-xs space-y-1">
+                  <p className="font-bold text-stone-800 dark:text-stone-100 tabular-nums">
+                    {lang === 'ar'
+                      ? `نهاية المسابقة: ${endLabel} · المتبقّي ${formatNumber(remDays, 'ar')} يوماً`
+                      : `Ends: ${endLabel} · ${remDays} days remaining`}
+                  </p>
+                  <p className="font-semibold text-[var(--accent)] tabular-nums">
+                    {lang === 'ar'
+                      ? `خطة التسجيل اليوم: تقسيم ${formatNumber(TOTAL_GOSPEL_CHAPTERS, 'ar')} أصحاحاً على ${formatNumber(remDays, 'ar')} يوماً (${pace.label})`
+                      : `Joining today: ${TOTAL_GOSPEL_CHAPTERS} chapters divided across ${remDays} days (${pace.label})`}
+                  </p>
+                  {isLate && (
+                    <p className="text-[11px] text-stone-600 dark:text-stone-300">
+                      {lang === 'ar'
+                        ? 'دخلت متأخراً؟ يحسب الموقع الأيام المتبقية تلقائياً لتختم قبل نهاية المسابقة.'
+                        : 'Joining late? Your daily plan automatically adapts to finish by the end date.'}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Mode Tabs: Register / Sign In */}

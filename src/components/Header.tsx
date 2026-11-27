@@ -6,6 +6,7 @@ import { HeroSymbol } from './HeroSymbol';
 interface HeaderProps {
   lang: Language;
   theme: ThemeMode;
+  christmasTheme: boolean;
   familyName: string;
   userName?: string | null;
   logoDataUrl: string | null;
@@ -19,6 +20,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   lang,
   theme,
+  christmasTheme,
   familyName,
   userName,
   logoDataUrl,
@@ -29,7 +31,8 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
 }) => {
   return (
-    <header className="sticky top-0 z-30 border-b border-stone-200/80 dark:border-white/10 bg-[#FAF7F4]/90 dark:bg-[#181214]/90 backdrop-blur-md">
+    <header className="sticky top-0 z-30 border-b border-stone-200/80 dark:border-white/10 bg-[#FAF7F4]/95 dark:bg-[#181214]/95 backdrop-blur-md">
+      {christmasTheme && <div aria-hidden="true" className="h-1 w-full xmas-tricolor-bar" />}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
         {/* Zone 1: Family Logo + Name (Read-only for members; editable in Developer Settings) */}
         <div className="flex items-center gap-3 min-w-0">
@@ -111,6 +114,30 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
       </div>
+
+      {/* Festive Tri-Color Garland Lights Strand (Red, Green & Gold) */}
+      {christmasTheme && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none max-w-5xl mx-auto px-4 flex items-center justify-between h-2 overflow-hidden"
+        >
+          {Array.from({ length: 24 }, (_, i) => {
+            const colors = ['#DC2626', '#16A34A', '#FBBF24', '#EF4444', '#22C55E', '#FDE047'];
+            const c = colors[i % colors.length];
+            return (
+              <span
+                key={i}
+                className="w-1.5 h-1.5 rounded-full xmas-light"
+                style={{
+                  backgroundColor: c,
+                  boxShadow: `0 0 7px ${c}`,
+                  animationDelay: `${(i % 6) * 0.4}s`,
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
     </header>
   );
 };

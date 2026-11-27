@@ -1,6 +1,12 @@
 import React, { useId, useMemo } from 'react';
 import { Sparkles } from 'lucide-react';
-import { formatNumber } from '../data/readingPlan';
+import {
+  computeSuggestedDay,
+  DEFAULT_COMPETITION_END_DATE,
+  DEFAULT_COMPETITION_START_DATE,
+  formatNumber,
+  getDaysBetweenInclusive,
+} from '../data/readingPlan';
 import type { HeroIconSize, Language, ThemeMode } from '../types';
 
 interface BethlehemJourneyProps {
@@ -8,10 +14,23 @@ interface BethlehemJourneyProps {
   totalDays: number;
   percent: number;
   currentDay: number;
+  lentStartDate: string;
+  lentEndDate: string;
+  userStartDate: string;
   lang: Language;
   theme: ThemeMode;
+  christmasTheme?: boolean;
   size: HeroIconSize;
   caption: string;
+}
+
+function formatShortMonthDay(dateStr: string, lang: Language): string {
+  const dt = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(dt.getTime())) return dateStr;
+  return new Intl.DateTimeFormat(lang === 'ar' ? 'ar-EG' : 'en-US', {
+    day: 'numeric',
+    month: 'short',
+  }).format(dt);
 }
 
 /**
@@ -34,8 +53,12 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
   totalDays,
   percent,
   currentDay,
+  lentStartDate,
+  lentEndDate,
+  userStartDate,
   lang,
   theme,
+  christmasTheme = true,
   size,
   caption,
 }) => {
@@ -43,11 +66,32 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
   const isRtl = lang === 'ar';
   const isDark = theme === 'dark';
 
-  const safeTotal = Math.max(1, totalDays);
-  const clampedCompleted = Math.max(0, Math.min(safeTotal, completedDaysCount));
-  const progressRatio = clampedCompleted / safeTotal;
-  const hasArrived = clampedCompleted >= safeTotal || percent >= 100;
-  const remainingDays = Math.max(0, safeTotal - clampedCompleted);
+  const fastStart = lentStartDate || DEFAULT_COMPETITION_START_DATE;
+  const fastEnd = lentEndDate || DEFAULT_COMPETITION_END_DATE;
+  const fastTotalDays = Math.max(1, getDaysBetweenInclusive(fastStart, fastEnd));
+  const fastTodayDay = computeSuggestedDay(fastStart, fastTotalDays);
+
+  // Days already elapsed in the 43-day Nativity Fast before this participant started
+  const joinOffsetDays =
+    userStartDate > fastStart
+      ? Math.min(fastTotalDays - 1, Math.max(0, getDaysBetweenInclusive(fastStart, userStartDate) - 1))
+      : 0;
+
+  const userPlanDays = Math.max(1, totalDays);
+  const clampedUserDone = Math.max(0, Math.min(userPlanDays, completedDaysCount));
+  const hasArrived = clampedUserDone >= userPlanDays || percent >= 100;
+
+  const remainingFastSpan = Math.max(1, fastTotalDays - joinOffsetDays);
+  const journeyCompletedDays = hasArrived
+    ? fastTotalDays
+    : Math.min(
+        fastTotalDays,
+        Math.round(joinOffsetDays + (clampedUserDone / userPlanDays) * remainingFastSpan)
+      );
+  const activeFastMarkerDay = Math.min(fastTotalDays, joinOffsetDays + currentDay);
+
+  const progressRatio = hasArrived ? 1 : journeyCompletedDays / fastTotalDays;
+  const remainingDays = Math.max(0, fastTotalDays - journeyCompletedDays);
 
   // Road polyline path sampled smoothly across 48 segments so pathLength="100" aligns with getRoadPoint(t)
   const { roadPathD, milestones } = useMemo(() => {
@@ -59,16 +103,16 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
       pts.push(`${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`);
     }
 
-    const stops = Array.from({ length: safeTotal }, (_, idx) => {
+    const stops = Array.from({ length: fastTotalDays }, (_, idx) => {
       const dayNum = idx + 1;
-      const t = dayNum / safeTotal;
+      const t = dayNum / fastTotalDays;
       const p = getRoadPoint(t, isRtl);
       return {
         dayNum,
         x: p.x,
         y: p.y,
-        done: dayNum <= clampedCompleted,
-        isCurrent: dayNum === currentDay,
+        done: dayNum <= journeyCompletedDays,
+        isCurrent: dayNum === activeFastMarkerDay || dayNum === fastTodayDay,
       };
     });
 
@@ -76,13 +120,15 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
       roadPathD: pts.join(' '),
       milestones: stops,
     };
-  }, [isRtl, safeTotal, clampedCompleted, currentDay]);
+  }, [isRtl, fastTotalDays, journeyCompletedDays, activeFastMarkerDay, fastTodayDay]);
 
   // Travelers stop just at the entrance of Bethlehem right before full arrival, then enter Bethlehem on arrival
   const travelerT = hasArrived ? 0.96 : progressRatio * 0.93;
   const travelerPos = getRoadPoint(travelerT, isRtl);
   const bethlehemX = isRtl ? 78 : 722;
   const startX = isRtl ? 705 : 95;
+  const startDateShort = formatShortMonthDay(fastStart, lang);
+  const endDateShort = formatShortMonthDay(fastEnd, lang);
 
   const containerWidthClass =
     size === 'sm' ? 'max-w-xl' : size === 'lg' ? 'max-w-4xl' : 'max-w-3xl';
@@ -125,8 +171,8 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
           <div className="flex items-center gap-2 text-xs font-bold tabular-nums">
             <span className="px-2.5 py-1 rounded-md bg-[var(--accent-soft)] text-[var(--accent)]">
               {isRtl
-                ? `${formatNumber(clampedCompleted, 'ar')} / ${formatNumber(safeTotal, 'ar')} يوماً`
-                : `${clampedCompleted} / ${safeTotal} Days`}
+                ? `${formatNumber(journeyCompletedDays, 'ar')} / ${formatNumber(fastTotalDays, 'ar')} يوماً`
+                : `${journeyCompletedDays} / ${fastTotalDays} Days`}
             </span>
             <span className="px-2 py-1 rounded-md bg-stone-100 dark:bg-white/10 text-stone-700 dark:text-stone-200">
               {formatNumber(Math.round(progressRatio * 100), lang)}%
@@ -143,8 +189,8 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
             role="img"
             aria-label={
               isRtl
-                ? `رحلة مريم ويوسف إلى بيت لحم: تم إتمام ${formatNumber(clampedCompleted, 'ar')} من ${formatNumber(safeTotal, 'ar')} يوماً`
-                : `Mary and Joseph journey to Bethlehem: ${clampedCompleted} of ${safeTotal} days completed`
+                ? `رحلة مريم ويوسف إلى بيت لحم: تم اجتياز ${formatNumber(journeyCompletedDays, 'ar')} من ${formatNumber(fastTotalDays, 'ar')} يوماً`
+                : `Mary and Joseph journey to Bethlehem: ${journeyCompletedDays} of ${fastTotalDays} days`
             }
           >
             <defs>
@@ -228,6 +274,34 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
               d="M0 176 Q 170 146 360 168 T 680 156 T 800 170 L 800 220 L 0 220 Z"
               fill={hillMid}
             />
+
+            {/* Snow-dusted Christmas Pine Trees along the Hills */}
+            {christmasTheme && (
+              <g opacity={isDark ? 0.78 : 0.72}>
+                {[
+                  [185, 149, 0.75],
+                  [205, 152, 0.55],
+                  [355, 154, 0.7],
+                  [485, 146, 0.8],
+                  [505, 150, 0.58],
+                  [620, 154, 0.72],
+                ].map(([tx, ty, sc], idx) => (
+                  <g key={idx} transform={`translate(${tx}, ${ty}) scale(${sc})`}>
+                    <rect x="-2" y="-3" width="4" height="7" fill="#78350F" />
+                    <polygon points="0,-32 -12,-14 12,-14" fill={isDark ? '#15803D' : '#16A34A'} />
+                    <polygon points="0,-32 -6,-23 6,-23" fill="#F8FAFC" opacity="0.88" />
+                    <polygon points="0,-20 -15,-3 15,-3" fill={isDark ? '#166534' : '#15803D'} />
+                    <circle
+                      cx={idx % 2 === 0 ? -4 : 4}
+                      cy="-10"
+                      r="1.4"
+                      fill={idx % 2 === 0 ? '#FDE047' : '#EF4444'}
+                      className="xmas-light"
+                    />
+                  </g>
+                ))}
+              </g>
+            )}
 
             {/* Starting Town Marker (Nazareth) */}
             <g transform={`translate(${startX}, 168)`} opacity="0.72">
@@ -333,7 +407,7 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
 
             {/* Day Milestone Dots along the Road (every day of the 43-day journey) */}
             {milestones.map((m) => {
-              const isWeekStop = m.dayNum % 7 === 0 || m.dayNum === 1 || m.dayNum === safeTotal;
+              const isWeekStop = m.dayNum % 7 === 0 || m.dayNum === 1 || m.dayNum === fastTotalDays;
               return (
                 <circle
                   key={m.dayNum}
@@ -439,21 +513,21 @@ export const BethlehemJourney: React.FC<BethlehemJourneyProps> = ({
 
         {/* Bottom Route Landmarks & Caption */}
         <div className="px-4 py-3 border-t border-stone-200/80 dark:border-white/10 flex flex-col gap-1.5 bg-stone-50/50 dark:bg-white/[0.015]">
-          <div className="flex items-center justify-between text-[11px] sm:text-xs font-semibold text-stone-500 dark:text-stone-400">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] sm:text-xs font-semibold text-stone-500 dark:text-stone-400">
             <span>
-              {isRtl ? 'الناصرة · بداية الطريق' : 'Nazareth · Start'}
+              {isRtl ? `الناصرة · ${startDateShort}` : `Nazareth · ${startDateShort}`}
             </span>
-            <span className="text-[var(--accent)] font-bold">
+            <span className="text-[var(--accent)] font-bold tabular-nums">
               {hasArrived
                 ? isRtl
                   ? 'اكتمل الطريق في بيت لحم!'
                   : 'Reached Bethlehem!'
                 : isRtl
-                ? `متبقّي ${formatNumber(remainingDays, 'ar')} يوماً للوصول`
-                : `${remainingDays} days to Bethlehem`}
+                ? `اليوم ${formatNumber(fastTodayDay, 'ar')} من ${formatNumber(fastTotalDays, 'ar')} في الصوم · متبقّي ${formatNumber(remainingDays, 'ar')} يوماً للوصول`
+                : `Fast Day ${fastTodayDay} of ${fastTotalDays} · ${remainingDays} days to Bethlehem`}
             </span>
             <span>
-              {isRtl ? 'بيت لحم · المغارة' : 'Bethlehem · Manger'}
+              {isRtl ? `بيت لحم · ${endDateShort}` : `Bethlehem · ${endDateShort}`}
             </span>
           </div>
 

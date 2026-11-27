@@ -18,6 +18,7 @@ import {
   Search,
   Share2,
   Shield,
+  Snowflake,
   Sparkles,
   Trash2,
   Upload,
@@ -29,8 +30,10 @@ import {
   DEFAULT_COMPETITION_END_DATE,
   formatDateReadable,
   formatNumber,
+  getChapterPaceSummary,
   getDayPlan,
   getDaysBetweenInclusive,
+  getEffectiveStartDate,
   TOTAL_GOSPEL_CHAPTERS,
   TOTAL_LENT_DAYS,
 } from '../data/readingPlan';
@@ -76,12 +79,42 @@ interface AdminPanelProps {
 type AdminTab = 'identity' | 'users' | 'texts' | 'theme' | 'content' | 'export';
 
 const ACCENT_PRESETS = [
-  { nameAr: 'أحمر ياقوتي', nameEn: 'Ruby Red', hex: '#DC2626' },
+  { nameAr: 'أحمر كريسماس', nameEn: 'Christmas Red', hex: '#DC2626' },
+  { nameAr: 'أخضر صنوبري', nameEn: 'Pine Green', hex: '#15803D' },
+  { nameAr: 'ذهبي احتفالي', nameEn: 'Festive Gold', hex: '#D97706' },
   { nameAr: 'قرمزي داكن', nameEn: 'Deep Crimson', hex: '#B91C1C' },
   { nameAr: 'عنّابي ملكي', nameEn: 'Royal Burgundy', hex: '#9F1239' },
-  { nameAr: 'ذهبي قبطي', nameEn: 'Coptic Gold', hex: '#B45309' },
-  { nameAr: 'أخضر زيتوني', nameEn: 'Olive Green', hex: '#15803D' },
   { nameAr: 'نيلي عميق', nameEn: 'Deep Indigo', hex: '#4338CA' },
+];
+
+const CHRISTMAS_MULTI_THEMES = [
+  {
+    id: 'xmas-classic',
+    nameAr: 'أحمر + أخضر + ذهبي (كريسماس كلاسيكي)',
+    nameEn: 'Red + Green + Gold (Classic)',
+    accentColor: '#DC2626',
+    darkCanvasColor: '#131A15',
+    lightCanvasColor: '#FAF7F2',
+    swatches: ['#DC2626', '#15803D', '#FBBF24'],
+  },
+  {
+    id: 'xmas-evergreen',
+    nameAr: 'أخضر صنوبري + ذهبي + أحمر',
+    nameEn: 'Evergreen + Gold + Red',
+    accentColor: '#15803D',
+    darkCanvasColor: '#101914',
+    lightCanvasColor: '#F5FAF6',
+    swatches: ['#15803D', '#D97706', '#DC2626'],
+  },
+  {
+    id: 'xmas-gold',
+    nameAr: 'ذهبي ملكي + أحمر + أخضر',
+    nameEn: 'Royal Gold + Red + Green',
+    accentColor: '#B45309',
+    darkCanvasColor: '#1A1410',
+    lightCanvasColor: '#FDFBF6',
+    swatches: ['#D97706', '#DC2626', '#15803D'],
+  },
 ];
 
 const HERO_ICONS: { key: HeroIconKey; labelAr: string; labelEn: string }[] = [
@@ -759,6 +792,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   </div>
 
+                  {/* Live Dynamic Plan Calculation Preview */}
+                  {(() => {
+                    const compDays = getDaysBetweenInclusive(
+                      draft.lentStartDate,
+                      draft.lentEndDate
+                    );
+                    const todayEff = getEffectiveStartDate(draft.lentStartDate);
+                    const remToday = getDaysBetweenInclusive(todayEff, draft.lentEndDate);
+                    const paceToday = getChapterPaceSummary(remToday, lang);
+                    return (
+                      <div className="p-3 app-control border border-[var(--accent)]/25 bg-[var(--accent-soft)]/40 text-xs text-stone-700 dark:text-stone-200 space-y-1 tabular-nums">
+                        <div>
+                          {lang === 'ar'
+                            ? `المدة الكاملة للمسابقة: ${formatNumber(compDays, 'ar')} يوماً`
+                            : `Total competition duration: ${compDays} days`}
+                        </div>
+                        <div className="font-semibold text-[var(--accent)]">
+                          {lang === 'ar'
+                            ? `لمن يسجل اليوم: المتبقي ${formatNumber(remToday, 'ar')} يوماً — يتم تقسيم الـ ${formatNumber(TOTAL_GOSPEL_CHAPTERS, 'ar')} أصحاحاً تلقائياً (${paceToday.label})`
+                            : `For anyone joining today: ${remToday} days left — ${TOTAL_GOSPEL_CHAPTERS} chapters split automatically (${paceToday.label})`}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Sequential Day Lock Toggle */}
                   <div className="p-4 app-control border border-stone-200 dark:border-white/10 bg-stone-50 dark:bg-black/20 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -1061,6 +1119,97 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
               {activeTab === 'theme' && (
                 <div className="space-y-6">
+                  {/* Developer-Only Christmas Theme & Falling Snow Toggle */}
+                  <div className="p-4 app-control border border-[var(--accent)]/30 bg-[var(--accent-soft)]/35 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <Snowflake className="w-5 h-5 text-[var(--accent)] shrink-0" />
+                      <div>
+                        <div className="text-sm font-bold text-stone-900 dark:text-white">
+                          {lang === 'ar'
+                            ? 'ثيم الكريسماس (ثلج خلف الكلام + شجر وزينة)'
+                            : 'Christmas Theme (Snow, Trees & Garland)'}
+                        </div>
+                        <div className="text-xs text-stone-500 dark:text-stone-400">
+                          {lang === 'ar'
+                            ? 'يظهر للجميع عند الحفظ ويتحكم فيه المطور فقط'
+                            : 'Controlled exclusively by Developers and synced to all users'}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateDraft((p) => ({
+                          ...p,
+                          christmasTheme: p.christmasTheme === false ? true : false,
+                        }))
+                      }
+                      className={`min-h-[36px] px-3.5 app-control text-xs font-bold cursor-pointer transition-colors shrink-0 ${
+                        draft.christmasTheme !== false
+                          ? 'bg-[var(--accent)] text-white'
+                          : 'bg-stone-200 dark:bg-white/10 text-stone-700 dark:text-stone-300'
+                      }`}
+                    >
+                      {draft.christmasTheme !== false
+                        ? lang === 'ar'
+                          ? 'مفعّل'
+                          : 'On'
+                        : lang === 'ar'
+                        ? 'مُغلق'
+                        : 'Off'}
+                    </button>
+                  </div>
+
+                  {/* Multi-Color Christmas Theme Combos (Red + Green + Gold together) */}
+                  <div className="space-y-2.5">
+                    <label className="block text-sm font-bold text-stone-800 dark:text-stone-100">
+                      {lang === 'ar'
+                        ? 'باقات ألوان الكريسماس المتكاملة (أخضر + أحمر + ذهبي)'
+                        : 'Multi-Color Christmas Theme Palettes (Red + Green + Gold)'}
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      {CHRISTMAS_MULTI_THEMES.map((combo) => {
+                        const isSelected =
+                          draft.christmasTheme !== false &&
+                          draft.accentColor.toLowerCase() === combo.accentColor.toLowerCase() &&
+                          draft.darkCanvasColor.toLowerCase() === combo.darkCanvasColor.toLowerCase();
+                        return (
+                          <button
+                            key={combo.id}
+                            type="button"
+                            onClick={() =>
+                              updateDraft((p) => ({
+                                ...p,
+                                christmasTheme: true,
+                                accentColor: combo.accentColor,
+                                darkCanvasColor: combo.darkCanvasColor,
+                                lightCanvasColor: combo.lightCanvasColor,
+                              }))
+                            }
+                            className={`p-3 app-control border text-start space-y-2 cursor-pointer transition-colors ${
+                              isSelected
+                                ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                                : 'border-stone-200 dark:border-white/10 hover:bg-stone-100 dark:hover:bg-white/5'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              {combo.swatches.map((hex) => (
+                                <span
+                                  key={hex}
+                                  className="w-4 h-4 rounded-full border border-white/40"
+                                  style={{ backgroundColor: hex }}
+                                />
+                              ))}
+                            </div>
+                            <div className="text-xs font-bold text-stone-800 dark:text-stone-100 leading-snug">
+                              {lang === 'ar' ? combo.nameAr : combo.nameEn}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* Accent Color */}
                   <div className="space-y-3">
                     <label className="block text-sm font-bold text-stone-800 dark:text-stone-100">

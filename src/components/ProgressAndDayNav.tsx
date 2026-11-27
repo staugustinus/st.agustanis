@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { Calendar, Check, ChevronLeft, ChevronRight, Flame, Lock } from 'lucide-react';
 import {
+  formatDateReadable,
   formatNumber,
   formatReadingRange,
+  getChapterPaceSummary,
   getDayDateString,
   getDayPlan,
+  TOTAL_LENT_DAYS,
 } from '../data/readingPlan';
 import type { DayPlan, Language } from '../types';
 
@@ -15,6 +18,7 @@ interface ProgressAndDayNavProps {
   readingPlan: DayPlan[];
   completedDays: number[];
   planStartDate: string;
+  lentEndDate: string;
   stats: {
     completedDaysCount: number;
     completedChapters: number;
@@ -42,6 +46,7 @@ export const ProgressAndDayNav: React.FC<ProgressAndDayNavProps> = ({
   readingPlan,
   completedDays,
   planStartDate,
+  lentEndDate,
   stats,
   maxUnlockedDay,
   sequentialLock,
@@ -56,6 +61,8 @@ export const ProgressAndDayNav: React.FC<ProgressAndDayNavProps> = ({
   const dayPlan = getDayPlan(currentDay, readingPlan);
   const dateLabel = getDayDateString(planStartDate, currentDay, lang);
   const readingSummary = formatReadingRange(dayPlan.readings, lang);
+  const pace = getChapterPaceSummary(totalDays, lang);
+  const endLabel = formatDateReadable(lentEndDate, lang);
 
   // Direction-aware prev/next icons
   const PrevIcon = lang === 'ar' ? ChevronRight : ChevronLeft;
@@ -99,6 +106,16 @@ export const ProgressAndDayNav: React.FC<ProgressAndDayNavProps> = ({
               style={{ width: `${stats.percent}%` }}
             />
           </div>
+
+          <p className="text-[11px] font-medium text-stone-500 dark:text-stone-400 tabular-nums">
+            {totalDays < TOTAL_LENT_DAYS
+              ? lang === 'ar'
+                ? `خطتك المخصّصة: ${formatNumber(stats.totalChapters, 'ar')} أصحاحاً ÷ ${formatNumber(totalDays, 'ar')} يوماً (${pace.label}) حتى ${endLabel}`
+                : `Your adjusted plan: ${stats.totalChapters} chapters ÷ ${totalDays} days (${pace.label}) until ${endLabel}`
+              : lang === 'ar'
+              ? `خطتك: ${formatNumber(totalDays, 'ar')} يوماً (${pace.label}) · حتى ${endLabel}`
+              : `Your plan: ${totalDays} days (${pace.label}) · Until ${endLabel}`}
+          </p>
         </div>
 
         {/* Card 2: Streak & Total Completed Days */}
