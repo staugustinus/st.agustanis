@@ -60,6 +60,18 @@
           "enum": ["journey", "heart"],
           "maxLength": 20
         },
+        "sectionOrder": {
+          "type": "array",
+          "description": "Ordered list of main page section identifiers."
+        },
+        "layoutSettings": {
+          "type": "object",
+          "description": "Thumbnail, logo arrangement, and card grid layout settings."
+        },
+        "elementColors": {
+          "type": "object",
+          "description": "Per-element custom background and text color overrides."
+        },
         "lentStartDate": {
           "type": "string",
           "maxLength": 20

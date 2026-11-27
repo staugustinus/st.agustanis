@@ -9,7 +9,7 @@ import {
   getDayPlan,
   TOTAL_LENT_DAYS,
 } from '../data/readingPlan';
-import type { DayPlan, Language } from '../types';
+import type { CardsArrangement, DayPlan, Language } from '../types';
 
 interface ProgressAndDayNavProps {
   lang: Language;
@@ -28,6 +28,7 @@ interface ProgressAndDayNavProps {
   };
   maxUnlockedDay: number;
   sequentialLock: boolean;
+  cardsArrangement?: CardsArrangement;
   copy: {
     progressTitle: string;
     streakTitle: string;
@@ -50,6 +51,7 @@ export const ProgressAndDayNav: React.FC<ProgressAndDayNavProps> = ({
   stats,
   maxUnlockedDay,
   sequentialLock,
+  cardsArrangement = 'two-column',
   copy,
   onSelectDay,
   onLockedDayAttempt,
@@ -68,12 +70,24 @@ export const ProgressAndDayNav: React.FC<ProgressAndDayNavProps> = ({
   const PrevIcon = lang === 'ar' ? ChevronRight : ChevronLeft;
   const NextIcon = lang === 'ar' ? ChevronLeft : ChevronRight;
 
+  const gridClass =
+    cardsArrangement === 'stacked'
+      ? 'grid grid-cols-1 gap-4'
+      : cardsArrangement === 'compact'
+      ? 'grid grid-cols-2 gap-3'
+      : 'grid grid-cols-1 md:grid-cols-2 gap-4';
+
+  const cardPadClass = cardsArrangement === 'compact' ? 'p-3.5 sm:p-4' : 'p-5';
+
   return (
     <section className="space-y-4" aria-label={copy.progressTitle}>
       {/* Two Stat Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className={gridClass}>
         {/* Card 1: Gospel Reading Completion % */}
-        <div className="app-card border border-stone-200 dark:border-white/10 bg-white dark:bg-[#22191C] p-5 flex flex-col justify-between gap-3">
+        <div
+          data-el="progress"
+          className={`app-card border border-stone-200 dark:border-white/10 bg-white dark:bg-[#22191C] ${cardPadClass} flex flex-col justify-between gap-3`}
+        >
           <div className="flex items-baseline justify-between gap-2">
             <h2 className="text-sm font-semibold text-stone-600 dark:text-stone-300">
               {copy.progressTitle}
@@ -102,6 +116,7 @@ export const ProgressAndDayNav: React.FC<ProgressAndDayNavProps> = ({
             aria-valuemax={100}
           >
             <div
+              data-el="progress-bar"
               className="h-full rounded-full bg-[var(--accent)] transition-all duration-300"
               style={{ width: `${stats.percent}%` }}
             />
@@ -119,7 +134,10 @@ export const ProgressAndDayNav: React.FC<ProgressAndDayNavProps> = ({
         </div>
 
         {/* Card 2: Streak & Total Completed Days */}
-        <div className="app-card border border-stone-200 dark:border-white/10 bg-white dark:bg-[#22191C] p-5 flex flex-col justify-between gap-3">
+        <div
+          data-el="progress"
+          className={`app-card border border-stone-200 dark:border-white/10 bg-white dark:bg-[#22191C] ${cardPadClass} flex flex-col justify-between gap-3`}
+        >
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-stone-600 dark:text-stone-300">
               {copy.streakTitle}
@@ -154,7 +172,10 @@ export const ProgressAndDayNav: React.FC<ProgressAndDayNavProps> = ({
       </div>
 
       {/* Day Navigator Bar */}
-      <div className="app-card border border-stone-200 dark:border-white/10 bg-white dark:bg-[#22191C] p-3 sm:p-4">
+      <div
+        data-el="progress"
+        className="app-card border border-stone-200 dark:border-white/10 bg-white dark:bg-[#22191C] p-3 sm:p-4"
+      >
         <div className="flex items-center justify-between gap-2">
           <button
             type="button"

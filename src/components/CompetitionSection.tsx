@@ -50,6 +50,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
 
   return (
     <section
+      data-el="competition"
       aria-label={lang === 'ar' ? 'مسابقة الأسرة' : 'Fellowship Competition'}
       className="app-card bg-white dark:bg-[#23191D] p-5 sm:p-6 space-y-5 border border-[var(--accent)]/25"
     >

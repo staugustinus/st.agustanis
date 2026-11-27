@@ -60,10 +60,14 @@ service cloud.firestore {
           'logoDataUrl', 'accentColor', 'lightCanvasColor', 'darkCanvasColor',
           'lightTextColor', 'darkTextColor', 'fontPreset',
           'radiusPreset', 'cardStyle', 'heroIcon', 'heroIconSize',
-          'progressStyle', 'journeyMigrated', 'pin2027Migrated',
+          'progressStyle', 'sectionOrder', 'layoutSettings', 'elementColors',
+          'journeyMigrated', 'pin2027Migrated',
           'lentStartDate', 'lentEndDate', 'sequentialLock', 'christmasTheme',
           'copy', 'quotes', 'practices', 'competition', 'updatedAt', 'updatedBy'
         ])
+        && (!('sectionOrder' in data) || (data.sectionOrder is list && data.sectionOrder.size() <= 10))
+        && (!('layoutSettings' in data) || data.layoutSettings is map)
+        && (!('elementColors' in data) || data.elementColors is map)
         && (!('christmasTheme' in data) || data.christmasTheme is bool)
         && (!('competition' in data) || isValidCompetition(data.competition))
         && (!('fontPreset' in data) || data.fontPreset in ['cairo', 'tajawal', 'almarai', 'amiri', 'rubik'])
@@ -138,7 +142,8 @@ service cloud.firestore {
               'accentColor', 'lightCanvasColor', 'darkCanvasColor',
               'lightTextColor', 'darkTextColor', 'fontPreset',
               'radiusPreset', 'cardStyle', 'heroIcon', 'heroIconSize',
-              'progressStyle', 'christmasTheme',
+              'progressStyle', 'sectionOrder', 'layoutSettings', 'elementColors',
+              'christmasTheme',
               'updatedAt', 'updatedBy'
             ])
           )

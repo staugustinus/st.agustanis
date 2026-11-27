@@ -1,12 +1,13 @@
 import React from 'react';
 import { Check, CheckSquare, Quote, Share2 } from 'lucide-react';
 import { formatNumber } from '../data/readingPlan';
-import type { FatherQuote, Language, WeeklyPractice } from '../types';
+import type { CardsArrangement, FatherQuote, Language, WeeklyPractice } from '../types';
 
 interface QuoteAndPracticesProps {
   lang: Language;
   currentDay: number;
   currentWeek: number;
+  cardsArrangement?: CardsArrangement;
   quoteSectionTitle: string;
   practicesSectionTitle: string;
   quote: FatherQuote | undefined;
@@ -20,6 +21,7 @@ export const QuoteAndPractices: React.FC<QuoteAndPracticesProps> = ({
   lang,
   currentDay,
   currentWeek,
+  cardsArrangement = 'two-column',
   quoteSectionTitle,
   practicesSectionTitle,
   quote,
@@ -35,10 +37,21 @@ export const QuoteAndPractices: React.FC<QuoteAndPracticesProps> = ({
   const quoteText = quote ? (lang === 'ar' ? quote.textAr : quote.textEn) : '';
   const saintName = quote ? (lang === 'ar' ? quote.saintAr : quote.saintEn) : '';
 
+  const gridClass =
+    cardsArrangement === 'stacked'
+      ? 'grid grid-cols-1 gap-6 items-stretch'
+      : cardsArrangement === 'compact'
+      ? 'grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch'
+      : 'grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch';
+  const cardPadClass = cardsArrangement === 'compact' ? 'p-4 sm:p-5' : 'p-6 sm:p-7';
+
   return (
-    <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+    <section className={gridClass}>
       {/* 6. Quote of the Day from the Church Fathers */}
-      <div className="app-card border border-stone-200 dark:border-white/10 bg-white dark:bg-[#22191C] p-6 sm:p-7 flex flex-col justify-between gap-6">
+      <div
+        data-el="quote"
+        className={`app-card border border-stone-200 dark:border-white/10 bg-white dark:bg-[#22191C] ${cardPadClass} flex flex-col justify-between gap-6`}
+      >
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -54,7 +67,10 @@ export const QuoteAndPractices: React.FC<QuoteAndPracticesProps> = ({
 
           <div className="py-3 border-y border-stone-100 dark:border-white/10">
             {quote ? (
-              <blockquote className="font-scripture text-xl sm:text-2xl leading-[1.9] text-stone-900 dark:text-stone-100">
+              <blockquote
+                data-el="quote-text"
+                className="font-scripture text-xl sm:text-2xl leading-[1.9] text-stone-900 dark:text-stone-100"
+              >
                 «{quoteText}»
               </blockquote>
             ) : (
@@ -86,8 +102,11 @@ export const QuoteAndPractices: React.FC<QuoteAndPracticesProps> = ({
       </div>
 
       {/* 7. Interactive Weekly Practices */}
-      <div className="app-card border border-stone-200 dark:border-white/10 bg-white dark:bg-[#22191C] p-6 sm:p-7 flex flex-col justify-between gap-5">
-        <div className="space-y-4">
+      <div
+        data-el="practices"
+        className={`app-card border border-stone-200 dark:border-white/10 bg-white dark:bg-[#22191C] ${cardPadClass} flex flex-col justify-between gap-5`}
+      >
+        <div data-el="practices-text" className="space-y-4">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <CheckSquare className="w-4 h-4 text-[var(--accent)]" />

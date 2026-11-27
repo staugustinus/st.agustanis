@@ -207,6 +207,7 @@ export const GospelReader: React.FC<GospelReaderProps> = ({
 
   return (
     <section
+      data-el="reader"
       className="app-card border border-stone-200 dark:border-white/10 bg-white dark:bg-[#22191C] overflow-hidden"
       aria-labelledby="gospel-reader-heading"
     >
@@ -493,6 +494,7 @@ export const GospelReader: React.FC<GospelReaderProps> = ({
                   {isExpanded && (
                     <div className="px-4 pb-5 pt-2 sm:px-6 sm:pb-6 space-y-6 border-t border-stone-200/80 dark:border-white/10">
                       <div
+                        data-el="reader-text"
                         className="font-scripture text-stone-900 dark:text-stone-100 leading-[2.15] space-y-2.5 select-text pt-2"
                         style={{ fontSize: `${fontSize}px` }}
                       >

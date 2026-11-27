@@ -29,7 +29,19 @@ import {
   getTodayDateString,
   TOTAL_GOSPEL_CHAPTERS,
 } from './data/readingPlan';
-import type { AppConfig, CompetitionConfig, ParticipantRole, UserAccount } from './types';
+import {
+  DEFAULT_LAYOUT_SETTINGS,
+  DEFAULT_SECTION_ORDER,
+} from './data/defaultConfig';
+import type {
+  AppConfig,
+  CompetitionConfig,
+  ElementColorsConfig,
+  LayoutSettings,
+  PageSectionId,
+  ParticipantRole,
+  UserAccount,
+} from './types';
 import { normalizeNameKey } from './utils/digits';
 
 export const ADMIN_EMAIL = 'thomasgawdat3@gmail.com';
@@ -216,6 +228,87 @@ function sanitizeCompetition(comp?: CompetitionConfig): CompetitionConfig {
   };
 }
 
+const VALID_SECTIONS: PageSectionId[] = [
+  'hero',
+  'progress',
+  'gospels',
+  'quotePractices',
+  'competition',
+];
+
+function sanitizeSectionOrder(order?: PageSectionId[]): PageSectionId[] {
+  const result: PageSectionId[] = [];
+  for (const id of order || []) {
+    if (VALID_SECTIONS.includes(id) && !result.includes(id)) {
+      result.push(id);
+    }
+  }
+  for (const id of DEFAULT_SECTION_ORDER) {
+    if (!result.includes(id)) {
+      result.push(id);
+    }
+  }
+  return result;
+}
+
+function sanitizeLayoutSettings(layout?: Partial<LayoutSettings>): LayoutSettings {
+  return {
+    heroLogoPosition:
+      layout?.heroLogoPosition === 'top' || layout?.heroLogoPosition === 'banner'
+        ? layout.heroLogoPosition
+        : DEFAULT_LAYOUT_SETTINGS.heroLogoPosition,
+    heroArrangement:
+      layout?.heroArrangement === 'journey-first'
+        ? 'journey-first'
+        : DEFAULT_LAYOUT_SETTINGS.heroArrangement,
+    logoShape:
+      layout?.logoShape === 'circle' || layout?.logoShape === 'square'
+        ? layout.logoShape
+        : DEFAULT_LAYOUT_SETTINGS.logoShape,
+    logoSize:
+      layout?.logoSize === 'sm' || layout?.logoSize === 'lg'
+        ? layout.logoSize
+        : DEFAULT_LAYOUT_SETTINGS.logoSize,
+    cardsArrangement:
+      layout?.cardsArrangement === 'stacked' || layout?.cardsArrangement === 'compact'
+        ? layout.cardsArrangement
+        : DEFAULT_LAYOUT_SETTINGS.cardsArrangement,
+  };
+}
+
+const ELEMENT_COLOR_KEYS: (keyof ElementColorsConfig)[] = [
+  'headerBg',
+  'headerText',
+  'heroBg',
+  'heroNameColor',
+  'heroSubtitleColor',
+  'progressBg',
+  'progressText',
+  'progressBarColor',
+  'readerBg',
+  'readerText',
+  'quoteBg',
+  'quoteText',
+  'practicesBg',
+  'practicesText',
+  'competitionBg',
+  'competitionText',
+  'footerBg',
+  'footerText',
+];
+
+function sanitizeElementColors(colors?: ElementColorsConfig): ElementColorsConfig {
+  const out: ElementColorsConfig = {};
+  if (!colors) return out;
+  for (const key of ELEMENT_COLOR_KEYS) {
+    const val = colors[key];
+    if (typeof val === 'string' && val.trim()) {
+      out[key] = val.trim().slice(0, 20);
+    }
+  }
+  return out;
+}
+
 export async function publishAppConfigToCloud(
   config: AppConfig
 ): Promise<{ ok: boolean; updatedAt?: number; error?: string }> {
@@ -243,6 +336,9 @@ export async function publishAppConfigToCloud(
     heroIcon: config.heroIcon || 'heart',
     heroIconSize: config.heroIconSize || 'md',
     progressStyle: config.progressStyle || 'journey',
+    sectionOrder: sanitizeSectionOrder(config.sectionOrder),
+    layoutSettings: sanitizeLayoutSettings(config.layoutSettings),
+    elementColors: sanitizeElementColors(config.elementColors),
     journeyMigrated: true,
     pin2027Migrated: true,
     lentStartDate: config.lentStartDate || getTodayDateString(),
@@ -292,6 +388,9 @@ export async function publishServantContentToCloud(
     heroIcon: config.heroIcon || 'heart',
     heroIconSize: config.heroIconSize || 'md',
     progressStyle: config.progressStyle || 'journey',
+    sectionOrder: sanitizeSectionOrder(config.sectionOrder),
+    layoutSettings: sanitizeLayoutSettings(config.layoutSettings),
+    elementColors: sanitizeElementColors(config.elementColors),
     christmasTheme: config.christmasTheme !== false,
     updatedAt: now,
     updatedBy: servantDocId.slice(0, 128),

@@ -1,5 +1,29 @@
-import type { AppConfig, CustomCopy } from '../types';
+import type {
+  AppConfig,
+  CustomCopy,
+  ElementColorsConfig,
+  LayoutSettings,
+  PageSectionId,
+} from '../types';
 import { DEFAULT_PRACTICES, DEFAULT_QUOTES } from './defaultSpiritualContent';
+
+export const DEFAULT_SECTION_ORDER: PageSectionId[] = [
+  'hero',
+  'progress',
+  'gospels',
+  'quotePractices',
+  'competition',
+];
+
+export const DEFAULT_LAYOUT_SETTINGS: LayoutSettings = {
+  heroLogoPosition: 'side',
+  heroArrangement: 'welcome-first',
+  logoShape: 'rounded',
+  logoSize: 'md',
+  cardsArrangement: 'two-column',
+};
+
+export const DEFAULT_ELEMENT_COLORS: ElementColorsConfig = {};
 
 export const DEFAULT_COPY: CustomCopy = {
   ar: {
@@ -61,6 +85,9 @@ export const DEFAULT_CONFIG: AppConfig = {
   heroIcon: 'heart',
   heroIconSize: 'md',
   progressStyle: 'journey',
+  sectionOrder: DEFAULT_SECTION_ORDER,
+  layoutSettings: DEFAULT_LAYOUT_SETTINGS,
+  elementColors: DEFAULT_ELEMENT_COLORS,
   lentStartDate: '2026-11-25',
   lentEndDate: '2027-01-06',
   sequentialLock: true,

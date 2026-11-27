@@ -81,6 +81,41 @@ export interface CustomCopy {
 
 export type ParticipantRole = 'member' | 'servant';
 
+export type PageSectionId = 'hero' | 'progress' | 'gospels' | 'quotePractices' | 'competition';
+export type HeroLogoPosition = 'side' | 'top' | 'banner';
+export type HeroArrangement = 'welcome-first' | 'journey-first';
+export type LogoShape = 'rounded' | 'circle' | 'square';
+export type CardsArrangement = 'two-column' | 'stacked' | 'compact';
+
+export interface LayoutSettings {
+  heroLogoPosition: HeroLogoPosition;
+  heroArrangement: HeroArrangement;
+  logoShape: LogoShape;
+  logoSize: HeroIconSize;
+  cardsArrangement: CardsArrangement;
+}
+
+export interface ElementColorsConfig {
+  headerBg?: string;
+  headerText?: string;
+  heroBg?: string;
+  heroNameColor?: string;
+  heroSubtitleColor?: string;
+  progressBg?: string;
+  progressText?: string;
+  progressBarColor?: string;
+  readerBg?: string;
+  readerText?: string;
+  quoteBg?: string;
+  quoteText?: string;
+  practicesBg?: string;
+  practicesText?: string;
+  competitionBg?: string;
+  competitionText?: string;
+  footerBg?: string;
+  footerText?: string;
+}
+
 export interface CompetitionQuestion {
   id: string;
   questionAr: string;
@@ -114,6 +149,9 @@ export interface AppConfig {
   heroIcon: HeroIconKey;
   heroIconSize: HeroIconSize;
   progressStyle?: ProgressStyle;
+  sectionOrder?: PageSectionId[];
+  layoutSettings?: LayoutSettings;
+  elementColors?: ElementColorsConfig;
   journeyMigrated?: boolean;
   updatedAt?: number;
   lentStartDate: string; // YYYY-MM-DD (default 2026-11-25)

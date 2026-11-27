@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { User as FirebaseUser } from 'firebase/auth';
-import { DEFAULT_CONFIG } from '../data/defaultConfig';
+import {
+  DEFAULT_CONFIG,
+  DEFAULT_ELEMENT_COLORS,
+  DEFAULT_LAYOUT_SETTINGS,
+  DEFAULT_SECTION_ORDER,
+} from '../data/defaultConfig';
 import {
   buildReadingPlan,
   computeMaxUnlockedDay,
@@ -40,8 +45,10 @@ import {
 import type {
   AppConfig,
   AppState,
+  ElementColorsConfig,
   GospelKey,
   Language,
+  PageSectionId,
   ParticipantRole,
   ThemeMode,
   UserAccount,
@@ -90,6 +97,16 @@ function mergeConfig(
     christmasTheme: incoming.christmasTheme !== undefined ? incoming.christmasTheme : true,
     progressStyle: !incoming.journeyMigrated ? 'journey' : incoming.progressStyle || 'journey',
     journeyMigrated: true,
+    sectionOrder: normalizeSectionOrder(incoming.sectionOrder || base.sectionOrder),
+    layoutSettings: {
+      ...DEFAULT_LAYOUT_SETTINGS,
+      ...(base.layoutSettings || {}),
+      ...(incoming.layoutSettings || {}),
+    },
+    elementColors: {
+      ...DEFAULT_ELEMENT_COLORS,
+      ...(incoming.elementColors || {}),
+    },
     adminPinEnabled: true,
     adminPin: needs2027Upgrade ? '2027' : rawPin || base.adminPin,
     pin2027Migrated: true,
@@ -124,6 +141,29 @@ function mergeConfig(
         }
       : base.competition,
   };
+}
+
+const KNOWN_SECTIONS: PageSectionId[] = [
+  'hero',
+  'progress',
+  'gospels',
+  'quotePractices',
+  'competition',
+];
+
+function normalizeSectionOrder(order?: PageSectionId[]): PageSectionId[] {
+  const out: PageSectionId[] = [];
+  for (const id of order || []) {
+    if (KNOWN_SECTIONS.includes(id) && !out.includes(id)) {
+      out.push(id);
+    }
+  }
+  for (const id of DEFAULT_SECTION_ORDER) {
+    if (!out.includes(id)) {
+      out.push(id);
+    }
+  }
+  return out;
 }
 
 function createInitialState(): AppState {
@@ -467,6 +507,38 @@ export function useAppState() {
     root.style.setProperty('--radius-control', controlRadius);
     root.setAttribute('data-card-style', cardStyle || 'bordered');
     root.setAttribute('data-christmas', state.config.christmasTheme !== false ? 'true' : 'false');
+
+    const elColors: ElementColorsConfig = state.config.elementColors || {};
+    const elColorBindings: [keyof ElementColorsConfig, string, string][] = [
+      ['headerBg', '--el-header-bg', 'data-has-el-header-bg'],
+      ['headerText', '--el-header-text', 'data-has-el-header-text'],
+      ['heroBg', '--el-hero-bg', 'data-has-el-hero-bg'],
+      ['heroNameColor', '--el-hero-name', 'data-has-el-hero-name'],
+      ['heroSubtitleColor', '--el-hero-sub', 'data-has-el-hero-sub'],
+      ['progressBg', '--el-progress-bg', 'data-has-el-progress-bg'],
+      ['progressText', '--el-progress-text', 'data-has-el-progress-text'],
+      ['progressBarColor', '--el-progress-bar', 'data-has-el-progress-bar'],
+      ['readerBg', '--el-reader-bg', 'data-has-el-reader-bg'],
+      ['readerText', '--el-reader-text', 'data-has-el-reader-text'],
+      ['quoteBg', '--el-quote-bg', 'data-has-el-quote-bg'],
+      ['quoteText', '--el-quote-text', 'data-has-el-quote-text'],
+      ['practicesBg', '--el-practices-bg', 'data-has-el-practices-bg'],
+      ['practicesText', '--el-practices-text', 'data-has-el-practices-text'],
+      ['competitionBg', '--el-competition-bg', 'data-has-el-competition-bg'],
+      ['competitionText', '--el-competition-text', 'data-has-el-competition-text'],
+      ['footerBg', '--el-footer-bg', 'data-has-el-footer-bg'],
+      ['footerText', '--el-footer-text', 'data-has-el-footer-text'],
+    ];
+    for (const [key, cssVar, attr] of elColorBindings) {
+      const val = elColors[key]?.trim();
+      if (val) {
+        root.style.setProperty(cssVar, val);
+        root.setAttribute(attr, 'true');
+      } else {
+        root.style.removeProperty(cssVar);
+        root.removeAttribute(attr);
+      }
+    }
 
     const metaTheme = document.querySelector('meta[name="theme-color"]');
     if (metaTheme) {
@@ -991,6 +1063,12 @@ export function useAppState() {
         heroIcon: nextConfig.heroIcon,
         heroIconSize: nextConfig.heroIconSize,
         progressStyle: nextConfig.progressStyle || 'journey',
+        sectionOrder: normalizeSectionOrder(nextConfig.sectionOrder),
+        layoutSettings: {
+          ...DEFAULT_LAYOUT_SETTINGS,
+          ...(nextConfig.layoutSettings || {}),
+        },
+        elementColors: nextConfig.elementColors || {},
         christmasTheme: nextConfig.christmasTheme !== false,
         updatedAt: now,
       };

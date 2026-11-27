@@ -1,6 +1,6 @@
 import React from 'react';
 import { Award, Globe, LogOut, Moon, Settings, Sun, Volume2, VolumeX } from 'lucide-react';
-import type { HeroIconKey, Language, ThemeMode } from '../types';
+import type { HeroIconKey, Language, LogoShape, ThemeMode } from '../types';
 import { HeroSymbol } from './HeroSymbol';
 
 interface HeaderProps {
@@ -13,6 +13,7 @@ interface HeaderProps {
   isServant?: boolean;
   logoDataUrl: string | null;
   heroIcon: HeroIconKey;
+  logoShape?: LogoShape;
   onToggleLang: () => void;
   onToggleTheme: () => void;
   onToggleMusic: () => void;
@@ -31,6 +32,7 @@ export const Header: React.FC<HeaderProps> = ({
   isServant = false,
   logoDataUrl,
   heroIcon,
+  logoShape = 'rounded',
   onToggleLang,
   onToggleTheme,
   onToggleMusic,
@@ -38,13 +40,25 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAdmin,
   onLogout,
 }) => {
+  const logoRadiusClass =
+    logoShape === 'circle'
+      ? 'rounded-full'
+      : logoShape === 'square'
+      ? 'rounded-none'
+      : 'app-control';
+
   return (
-    <header className="sticky top-0 z-30 border-b border-stone-200/80 dark:border-white/10 bg-[#FAF7F4]/95 dark:bg-[#181214]/95 backdrop-blur-md">
+    <header
+      data-el="header"
+      className="sticky top-0 z-30 border-b border-stone-200/80 dark:border-white/10 bg-[#FAF7F4]/95 dark:bg-[#181214]/95 backdrop-blur-md"
+    >
       {christmasTheme && <div aria-hidden="true" className="h-1 w-full xmas-tricolor-bar" />}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2">
         {/* Zone 1: Family Logo + Name (Read-only for members; editable in Developer Settings) */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 app-control overflow-hidden border border-stone-200 dark:border-white/15 bg-white dark:bg-[#261C20] flex items-center justify-center">
+          <div
+            className={`w-9 h-9 sm:w-10 sm:h-10 shrink-0 ${logoRadiusClass} overflow-hidden border border-stone-200 dark:border-white/15 bg-white dark:bg-[#261C20] flex items-center justify-center`}
+          >
             {logoDataUrl ? (
               <img
                 src={logoDataUrl}
@@ -59,7 +73,7 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          <div className="min-w-0">
+          <div data-el="header-text" className="min-w-0">
             <p className="text-xs sm:text-sm font-semibold text-stone-800 dark:text-stone-100 truncate">
               {familyName}
             </p>

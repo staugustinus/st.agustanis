@@ -64,6 +64,7 @@ import type {
 } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { normalizeDigits } from '../utils/digits';
+import { CustomizationStudio } from './CustomizationStudio';
 import { HeroSymbol } from './HeroSymbol';
 
 interface AdminPanelProps {
@@ -1979,6 +1980,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       ))}
                     </div>
                   </div>
+
+                  <CustomizationStudio lang={lang} draft={draft} updateDraft={updateDraft} />
                 </div>
               )}
 

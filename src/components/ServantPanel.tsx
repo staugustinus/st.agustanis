@@ -43,6 +43,7 @@ import type {
   RadiusPreset,
   UserAccount,
 } from '../types';
+import { CustomizationStudio } from './CustomizationStudio';
 import { HeroSymbol } from './HeroSymbol';
 
 interface ServantPanelProps {
@@ -1219,6 +1220,8 @@ export const ServantPanel: React.FC<ServantPanelProps> = ({
                   ))}
                 </div>
               </div>
+
+              <CustomizationStudio lang={lang} draft={draft} updateDraft={updateDraft} />
             </div>
           )}
 

@@ -186,4 +186,70 @@ html.dark[data-christmas="true"] .app-card {
   animation: bethlehem-spin-reverse 28s linear infinite;
 }
 
+/* Per-element background & text color overrides */
+html[data-has-el-header-bg="true"] [data-el="header"] {
+  background-color: var(--el-header-bg) !important;
+}
+html[data-has-el-header-text="true"] [data-el="header-text"] :is(p, span) {
+  color: var(--el-header-text) !important;
+}
 
+html[data-has-el-hero-bg="true"] [data-el="hero"] {
+  background-color: var(--el-hero-bg) !important;
+  border-radius: var(--radius-card);
+  padding: 1.25rem;
+}
+html[data-has-el-hero-name="true"] [data-el="hero-name"] {
+  color: var(--el-hero-name) !important;
+}
+html[data-has-el-hero-sub="true"] [data-el="hero-sub"] {
+  color: var(--el-hero-sub) !important;
+}
+
+html[data-has-el-progress-bg="true"] [data-el="progress"] {
+  background-color: var(--el-progress-bg) !important;
+}
+html[data-has-el-progress-text="true"] [data-el="progress"] :is(h2, p, span) {
+  color: var(--el-progress-text) !important;
+}
+html[data-has-el-progress-bar="true"] [data-el="progress-bar"] {
+  background-color: var(--el-progress-bar) !important;
+}
+
+html[data-has-el-reader-bg="true"] [data-el="reader"] {
+  background-color: var(--el-reader-bg) !important;
+}
+html[data-has-el-reader-text="true"] [data-el="reader-text"],
+html[data-has-el-reader-text="true"] [data-el="reader"] :is(h2, h3, p, blockquote) {
+  color: var(--el-reader-text) !important;
+}
+
+html[data-has-el-quote-bg="true"] [data-el="quote"] {
+  background-color: var(--el-quote-bg) !important;
+}
+html[data-has-el-quote-text="true"] [data-el="quote-text"],
+html[data-has-el-quote-text="true"] [data-el="quote"] :is(h2, blockquote, cite, p, span) {
+  color: var(--el-quote-text) !important;
+}
+
+html[data-has-el-practices-bg="true"] [data-el="practices"] {
+  background-color: var(--el-practices-bg) !important;
+}
+html[data-has-el-practices-text="true"] [data-el="practices-text"],
+html[data-has-el-practices-text="true"] [data-el="practices"] :is(h2, p, span) {
+  color: var(--el-practices-text) !important;
+}
+
+html[data-has-el-competition-bg="true"] [data-el="competition"] {
+  background-color: var(--el-competition-bg) !important;
+}
+html[data-has-el-competition-text="true"] [data-el="competition"] :is(h2, p, span) {
+  color: var(--el-competition-text) !important;
+}
+
+html[data-has-el-footer-bg="true"] [data-el="footer"] {
+  background-color: var(--el-footer-bg) !important;
+}
+html[data-has-el-footer-text="true"] [data-el="footer"] :is(span, button) {
+  color: var(--el-footer-text) !important;
+}
