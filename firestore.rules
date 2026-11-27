@@ -58,6 +58,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'logoDataUrl', 'accentColor', 'lightCanvasColor', 'darkCanvasColor',
+          'lightTextColor', 'darkTextColor', 'fontPreset',
           'radiusPreset', 'cardStyle', 'heroIcon', 'heroIconSize',
           'progressStyle', 'journeyMigrated', 'pin2027Migrated',
           'lentStartDate', 'lentEndDate', 'sequentialLock', 'christmasTheme',
@@ -65,6 +66,9 @@ service cloud.firestore {
         ])
         && (!('christmasTheme' in data) || data.christmasTheme is bool)
         && (!('competition' in data) || isValidCompetition(data.competition))
+        && (!('fontPreset' in data) || data.fontPreset in ['cairo', 'tajawal', 'almarai', 'amiri', 'rubik'])
+        && (!('lightTextColor' in data) || (data.lightTextColor is string && data.lightTextColor.size() <= 20))
+        && (!('darkTextColor' in data) || (data.darkTextColor is string && data.darkTextColor.size() <= 20))
         && data.logoDataUrl is string && data.logoDataUrl.size() <= 220000
         && data.accentColor is string && data.accentColor.size() <= 20
         && data.lightCanvasColor is string && data.lightCanvasColor.size() <= 20
@@ -130,7 +134,12 @@ service cloud.firestore {
           (
             isVerifiedServant(incoming().updatedBy)
             && incoming().diff(existing()).affectedKeys().hasOnly([
-              'quotes', 'practices', 'competition', 'lentStartDate', 'lentEndDate', 'updatedAt', 'updatedBy'
+              'quotes', 'practices', 'competition', 'lentStartDate', 'lentEndDate',
+              'accentColor', 'lightCanvasColor', 'darkCanvasColor',
+              'lightTextColor', 'darkTextColor', 'fontPreset',
+              'radiusPreset', 'cardStyle', 'heroIcon', 'heroIconSize',
+              'progressStyle', 'christmasTheme',
+              'updatedAt', 'updatedBy'
             ])
           )
         );

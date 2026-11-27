@@ -26,6 +26,7 @@ import {
   Sparkles,
   Trash2,
   Trophy,
+  Type,
   Upload,
   UserCheck,
   Users,
@@ -51,6 +52,7 @@ import type {
   CompetitionConfig,
   CompetitionQuestion,
   CopyFields,
+  FontPreset,
   HeroIconKey,
   HeroIconSize,
   Language,
@@ -141,6 +143,33 @@ const HERO_ICONS: { key: HeroIconKey; labelAr: string; labelEn: string }[] = [
   { key: 'flame', labelAr: 'شمعة', labelEn: 'Candle' },
   { key: 'book', labelAr: 'إنجيل', labelEn: 'Book' },
   { key: 'sun', labelAr: 'نور', labelEn: 'Light' },
+];
+
+const FONT_PRESETS: {
+  key: FontPreset;
+  nameAr: string;
+  nameEn: string;
+  sampleFont: string;
+}[] = [
+  { key: 'cairo', nameAr: 'القاهرة (Cairo) — افتراضي', nameEn: 'Cairo + Plus Jakarta', sampleFont: "'Cairo', sans-serif" },
+  { key: 'tajawal', nameAr: 'تجوّل (Tajawal) — حديث', nameEn: 'Tajawal + DM Sans', sampleFont: "'Tajawal', sans-serif" },
+  { key: 'almarai', nameAr: 'المراعي (Almarai) — واضح', nameEn: 'Almarai + Outfit', sampleFont: "'Almarai', sans-serif" },
+  { key: 'amiri', nameAr: 'أميري (Amiri) — كتابي كلاسيكي', nameEn: 'Amiri + Lora Serif', sampleFont: "'Amiri', serif" },
+  { key: 'rubik', nameAr: 'روبيك (Rubik) — ناعم', nameEn: 'Rubik + Manrope', sampleFont: "'Rubik', sans-serif" },
+];
+
+const DARK_TEXT_PRESETS = [
+  { nameAr: 'افتراضي', nameEn: 'Default', hex: '' },
+  { nameAr: 'أبيض ناصع', nameEn: 'Pure White', hex: '#FFFFFF' },
+  { nameAr: 'ذهبي ناعم', nameEn: 'Soft Gold', hex: '#FDE68A' },
+  { nameAr: 'أخضر فاتح', nameEn: 'Mint Glow', hex: '#BBF7D0' },
+];
+
+const LIGHT_TEXT_PRESETS = [
+  { nameAr: 'افتراضي', nameEn: 'Default', hex: '' },
+  { nameAr: 'عنّابي داكن', nameEn: 'Burgundy Ink', hex: '#7F1D1D' },
+  { nameAr: 'أخضر داكن', nameEn: 'Forest Ink', hex: '#14532D' },
+  { nameAr: 'كحلي عميق', nameEn: 'Deep Navy', hex: '#1E3A8A' },
 ];
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -1677,6 +1706,127 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         >
                           {lang === 'ar' ? 'أبيض دافئ افتراضي' : 'Default Warm Ivory'}
                         </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Font Family & Text Colors */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Type className="w-4 h-4 text-[var(--accent)]" />
+                      <label className="text-sm font-bold text-stone-800 dark:text-stone-100">
+                        {lang === 'ar' ? 'نوع الخط العام للموقع' : 'Site Font Family'}
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {FONT_PRESETS.map((fp) => {
+                        const isSelected = (draft.fontPreset || 'cairo') === fp.key;
+                        return (
+                          <button
+                            key={fp.key}
+                            type="button"
+                            onClick={() => updateDraft((p) => ({ ...p, fontPreset: fp.key }))}
+                            style={{ fontFamily: fp.sampleFont }}
+                            className={`min-h-[44px] px-3.5 py-2 app-control border text-start flex items-center justify-between gap-2 cursor-pointer transition-colors ${
+                              isSelected
+                                ? 'bg-[var(--accent)] text-white border-[var(--accent)]'
+                                : 'border-stone-200 dark:border-white/10 text-stone-800 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-white/5'
+                            }`}
+                          >
+                            <span className="text-xs sm:text-sm font-bold">
+                              {lang === 'ar' ? fp.nameAr : fp.nameEn}
+                            </span>
+                            <span className="text-xs opacity-80">أبجد · Abc</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="p-4 app-control border border-stone-200 dark:border-white/10 bg-stone-50/70 dark:bg-black/20 space-y-3">
+                    <div className="text-sm font-bold text-stone-800 dark:text-stone-100">
+                      {lang === 'ar' ? 'ألوان الخط (النصوص)' : 'Font / Text Colors'}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="block text-xs font-bold text-stone-600 dark:text-stone-300">
+                          {lang === 'ar' ? 'لون الخط في الوضع الداكن' : 'Dark Mode Text Color'}
+                        </label>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {DARK_TEXT_PRESETS.map((preset) => {
+                            const active = (draft.darkTextColor || '').toLowerCase() === preset.hex.toLowerCase();
+                            return (
+                              <button
+                                key={preset.nameEn}
+                                type="button"
+                                onClick={() =>
+                                  updateDraft((p) => ({ ...p, darkTextColor: preset.hex }))
+                                }
+                                className={`min-h-[30px] px-2 py-1 app-control border text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
+                                  active
+                                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                                    : 'border-stone-300 dark:border-white/15 bg-white dark:bg-black/30 text-stone-700 dark:text-stone-300'
+                                }`}
+                              >
+                                {preset.hex && (
+                                  <span
+                                    className="w-3 h-3 rounded-full border border-stone-400"
+                                    style={{ backgroundColor: preset.hex }}
+                                  />
+                                )}
+                                <span>{lang === 'ar' ? preset.nameAr : preset.nameEn}</span>
+                              </button>
+                            );
+                          })}
+                          <input
+                            type="color"
+                            value={draft.darkTextColor || '#F8F4F4'}
+                            onChange={(e) =>
+                              updateDraft((p) => ({ ...p, darkTextColor: e.target.value }))
+                            }
+                            className="w-7 h-7 border border-stone-300 dark:border-white/15 rounded bg-transparent cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-xs font-bold text-stone-600 dark:text-stone-300">
+                          {lang === 'ar' ? 'لون الخط في الوضع الفاتح' : 'Light Mode Text Color'}
+                        </label>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {LIGHT_TEXT_PRESETS.map((preset) => {
+                            const active = (draft.lightTextColor || '').toLowerCase() === preset.hex.toLowerCase();
+                            return (
+                              <button
+                                key={preset.nameEn}
+                                type="button"
+                                onClick={() =>
+                                  updateDraft((p) => ({ ...p, lightTextColor: preset.hex }))
+                                }
+                                className={`min-h-[30px] px-2 py-1 app-control border text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
+                                  active
+                                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                                    : 'border-stone-300 dark:border-white/15 bg-white dark:bg-black/30 text-stone-700 dark:text-stone-300'
+                                }`}
+                              >
+                                {preset.hex && (
+                                  <span
+                                    className="w-3 h-3 rounded-full border border-stone-300"
+                                    style={{ backgroundColor: preset.hex }}
+                                  />
+                                )}
+                                <span>{lang === 'ar' ? preset.nameAr : preset.nameEn}</span>
+                              </button>
+                            );
+                          })}
+                          <input
+                            type="color"
+                            value={draft.lightTextColor || '#1C1718'}
+                            onChange={(e) =>
+                              updateDraft((p) => ({ ...p, lightTextColor: e.target.value }))
+                            }
+                            className="w-7 h-7 border border-stone-300 dark:border-white/15 rounded bg-transparent cursor-pointer"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>

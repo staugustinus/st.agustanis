@@ -5,13 +5,16 @@ import {
   ChevronDown,
   Cloud,
   Download,
+  Palette,
   Plus,
   RefreshCw,
   Save,
   Search,
+  Snowflake,
   Sparkles,
   Trash2,
   Trophy,
+  Type,
   Users,
   X,
 } from 'lucide-react';
@@ -29,11 +32,18 @@ import {
 } from '../data/readingPlan';
 import type {
   AppConfig,
+  CardStylePreset,
   CompetitionConfig,
   CompetitionQuestion,
+  FontPreset,
+  HeroIconKey,
+  HeroIconSize,
   Language,
+  ProgressStyle,
+  RadiusPreset,
   UserAccount,
 } from '../types';
+import { HeroSymbol } from './HeroSymbol';
 
 interface ServantPanelProps {
   isOpen: boolean;
@@ -50,7 +60,82 @@ interface ServantPanelProps {
   onNotify: (msg: string) => void;
 }
 
-type ServantTab = 'competition' | 'quotes' | 'practices' | 'users';
+type ServantTab = 'competition' | 'appearance' | 'quotes' | 'practices' | 'users';
+
+const ACCENT_PRESETS = [
+  { nameAr: 'أحمر كريسماس', nameEn: 'Christmas Red', hex: '#DC2626' },
+  { nameAr: 'أخضر صنوبري', nameEn: 'Pine Green', hex: '#15803D' },
+  { nameAr: 'ذهبي احتفالي', nameEn: 'Festive Gold', hex: '#D97706' },
+  { nameAr: 'قرمزي داكن', nameEn: 'Deep Crimson', hex: '#B91C1C' },
+  { nameAr: 'عنّابي ملكي', nameEn: 'Royal Burgundy', hex: '#9F1239' },
+  { nameAr: 'نيلي عميق', nameEn: 'Deep Indigo', hex: '#4338CA' },
+];
+
+const CHRISTMAS_MULTI_THEMES = [
+  {
+    id: 'xmas-classic',
+    nameAr: 'أحمر + أخضر + ذهبي',
+    nameEn: 'Red + Green + Gold',
+    accentColor: '#DC2626',
+    darkCanvasColor: '#131A15',
+    lightCanvasColor: '#FAF7F2',
+    swatches: ['#DC2626', '#15803D', '#FBBF24'],
+  },
+  {
+    id: 'xmas-evergreen',
+    nameAr: 'أخضر صنوبري + ذهبي',
+    nameEn: 'Evergreen + Gold',
+    accentColor: '#15803D',
+    darkCanvasColor: '#101914',
+    lightCanvasColor: '#F5FAF6',
+    swatches: ['#15803D', '#D97706', '#DC2626'],
+  },
+  {
+    id: 'xmas-gold',
+    nameAr: 'ذهبي ملكي + أحمر',
+    nameEn: 'Royal Gold + Red',
+    accentColor: '#B45309',
+    darkCanvasColor: '#1A1410',
+    lightCanvasColor: '#FDFBF6',
+    swatches: ['#D97706', '#DC2626', '#15803D'],
+  },
+];
+
+const FONT_PRESETS: {
+  key: FontPreset;
+  nameAr: string;
+  nameEn: string;
+  sampleFont: string;
+}[] = [
+  { key: 'cairo', nameAr: 'القاهرة (Cairo) — افتراضي', nameEn: 'Cairo + Plus Jakarta', sampleFont: "'Cairo', sans-serif" },
+  { key: 'tajawal', nameAr: 'تجوّل (Tajawal) — حديث', nameEn: 'Tajawal + DM Sans', sampleFont: "'Tajawal', sans-serif" },
+  { key: 'almarai', nameAr: 'المراعي (Almarai) — واضح', nameEn: 'Almarai + Outfit', sampleFont: "'Almarai', sans-serif" },
+  { key: 'amiri', nameAr: 'أميري (Amiri) — كتابي كلاسيكي', nameEn: 'Amiri + Lora Serif', sampleFont: "'Amiri', serif" },
+  { key: 'rubik', nameAr: 'روبيك (Rubik) — ناعم', nameEn: 'Rubik + Manrope', sampleFont: "'Rubik', sans-serif" },
+];
+
+const DARK_TEXT_PRESETS = [
+  { nameAr: 'افتراضي', nameEn: 'Default', hex: '' },
+  { nameAr: 'أبيض ناصع', nameEn: 'Pure White', hex: '#FFFFFF' },
+  { nameAr: 'ذهبي ناعم', nameEn: 'Soft Gold', hex: '#FDE68A' },
+  { nameAr: 'أخضر فاتح', nameEn: 'Mint Glow', hex: '#BBF7D0' },
+];
+
+const LIGHT_TEXT_PRESETS = [
+  { nameAr: 'افتراضي', nameEn: 'Default', hex: '' },
+  { nameAr: 'عنّابي داكن', nameEn: 'Burgundy Ink', hex: '#7F1D1D' },
+  { nameAr: 'أخضر داكن', nameEn: 'Forest Ink', hex: '#14532D' },
+  { nameAr: 'كحلي عميق', nameEn: 'Deep Navy', hex: '#1E3A8A' },
+];
+
+const HERO_ICONS: { key: HeroIconKey; labelAr: string; labelEn: string }[] = [
+  { key: 'heart', labelAr: 'قلب', labelEn: 'Heart' },
+  { key: 'cross', labelAr: 'صليب', labelEn: 'Cross' },
+  { key: 'star', labelAr: 'نجمة', labelEn: 'Star' },
+  { key: 'flame', labelAr: 'شمعة', labelEn: 'Candle' },
+  { key: 'book', labelAr: 'إنجيل', labelEn: 'Book' },
+  { key: 'sun', labelAr: 'نور', labelEn: 'Light' },
+];
 
 const EMPTY_COMPETITION: CompetitionConfig = {
   enabled: false,
@@ -215,7 +300,7 @@ export const ServantPanel: React.FC<ServantPanelProps> = ({
       if (res.syncedToCloud) {
         onNotify(
           lang === 'ar'
-            ? 'تم حفظ ونشر المسابقة والأقوال والتداريب للجميع'
+            ? 'تم حفظ ونشر التعديلات (المسابقة والمظهر والمحتوى) للجميع'
             : 'Saved & published live to all participants'
         );
         onClose();
@@ -370,6 +455,7 @@ export const ServantPanel: React.FC<ServantPanelProps> = ({
 
   const tabs: { key: ServantTab; labelAr: string; labelEn: string; icon: React.ReactNode }[] = [
     { key: 'competition', labelAr: 'كتابة مسابقة', labelEn: 'Competition', icon: <Trophy className="w-4 h-4" /> },
+    { key: 'appearance', labelAr: 'الألوان والخطوط والأشكال', labelEn: 'Colors, Fonts & Shapes', icon: <Palette className="w-4 h-4" /> },
     { key: 'quotes', labelAr: 'الأقوال اليومية', labelEn: 'Daily Quotes', icon: <Sparkles className="w-4 h-4" /> },
     { key: 'practices', labelAr: 'التداريب الأسبوعية', labelEn: 'Weekly Tasks', icon: <Award className="w-4 h-4" /> },
     {
@@ -687,6 +773,451 @@ export const ServantPanel: React.FC<ServantPanelProps> = ({
                     ))}
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Tab 2: Colors, Fonts, Text Colors & Shapes */}
+          {activeTab === 'appearance' && (
+            <div className="space-y-6">
+              {/* Font Family Selector */}
+              <div className="space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <Type className="w-4 h-4 text-[var(--accent)]" />
+                  <label className="text-sm font-bold text-stone-800 dark:text-stone-100">
+                    {lang === 'ar' ? 'نوع الخط العام للموقع' : 'Site Font Family'}
+                  </label>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {FONT_PRESETS.map((fp) => {
+                    const isSelected = (draft.fontPreset || 'cairo') === fp.key;
+                    return (
+                      <button
+                        key={fp.key}
+                        type="button"
+                        onClick={() => updateDraft((p) => ({ ...p, fontPreset: fp.key }))}
+                        style={{ fontFamily: fp.sampleFont }}
+                        className={`min-h-[46px] px-3.5 py-2 app-control border text-start flex items-center justify-between gap-2 cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'bg-[var(--accent)] text-white border-[var(--accent)]'
+                            : 'border-stone-200 dark:border-white/10 text-stone-800 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-white/5'
+                        }`}
+                      >
+                        <span className="text-sm font-bold">
+                          {lang === 'ar' ? fp.nameAr : fp.nameEn}
+                        </span>
+                        <span className="text-xs opacity-80">أبجد · Abc</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Font / Text Colors */}
+              <div className="p-4 app-control border border-stone-200 dark:border-white/10 bg-stone-50/70 dark:bg-black/20 space-y-4">
+                <div className="text-sm font-bold text-stone-800 dark:text-stone-100">
+                  {lang === 'ar' ? 'ألوان الخط (النصوص)' : 'Font / Text Colors'}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Dark mode font color */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-stone-600 dark:text-stone-300">
+                      {lang === 'ar' ? 'لون الخط في الوضع الداكن' : 'Dark Mode Text Color'}
+                    </label>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {DARK_TEXT_PRESETS.map((preset) => {
+                        const active = (draft.darkTextColor || '').toLowerCase() === preset.hex.toLowerCase();
+                        return (
+                          <button
+                            key={preset.nameEn}
+                            type="button"
+                            onClick={() =>
+                              updateDraft((p) => ({ ...p, darkTextColor: preset.hex }))
+                            }
+                            className={`min-h-[32px] px-2.5 py-1 app-control border text-[11px] font-bold flex items-center gap-1.5 cursor-pointer ${
+                              active
+                                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                                : 'border-stone-300 dark:border-white/15 bg-white dark:bg-black/30 text-stone-700 dark:text-stone-300'
+                            }`}
+                          >
+                            {preset.hex && (
+                              <span
+                                className="w-3 h-3 rounded-full border border-stone-400"
+                                style={{ backgroundColor: preset.hex }}
+                              />
+                            )}
+                            <span>{lang === 'ar' ? preset.nameAr : preset.nameEn}</span>
+                          </button>
+                        );
+                      })}
+                      <label className="min-h-[32px] px-2 app-control border border-stone-300 dark:border-white/15 bg-white dark:bg-black/30 flex items-center gap-1.5 cursor-pointer text-[11px] font-bold">
+                        <input
+                          type="color"
+                          value={draft.darkTextColor || '#F8F4F4'}
+                          onChange={(e) =>
+                            updateDraft((p) => ({ ...p, darkTextColor: e.target.value }))
+                          }
+                          className="w-4 h-4 border-0 bg-transparent cursor-pointer"
+                        />
+                        <span>{lang === 'ar' ? 'مخصص' : 'Custom'}</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Light mode font color */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-stone-600 dark:text-stone-300">
+                      {lang === 'ar' ? 'لون الخط في الوضع الفاتح' : 'Light Mode Text Color'}
+                    </label>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {LIGHT_TEXT_PRESETS.map((preset) => {
+                        const active = (draft.lightTextColor || '').toLowerCase() === preset.hex.toLowerCase();
+                        return (
+                          <button
+                            key={preset.nameEn}
+                            type="button"
+                            onClick={() =>
+                              updateDraft((p) => ({ ...p, lightTextColor: preset.hex }))
+                            }
+                            className={`min-h-[32px] px-2.5 py-1 app-control border text-[11px] font-bold flex items-center gap-1.5 cursor-pointer ${
+                              active
+                                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                                : 'border-stone-300 dark:border-white/15 bg-white dark:bg-black/30 text-stone-700 dark:text-stone-300'
+                            }`}
+                          >
+                            {preset.hex && (
+                              <span
+                                className="w-3 h-3 rounded-full border border-stone-300"
+                                style={{ backgroundColor: preset.hex }}
+                              />
+                            )}
+                            <span>{lang === 'ar' ? preset.nameAr : preset.nameEn}</span>
+                          </button>
+                        );
+                      })}
+                      <label className="min-h-[32px] px-2 app-control border border-stone-300 dark:border-white/15 bg-white dark:bg-black/30 flex items-center gap-1.5 cursor-pointer text-[11px] font-bold">
+                        <input
+                          type="color"
+                          value={draft.lightTextColor || '#1C1718'}
+                          onChange={(e) =>
+                            updateDraft((p) => ({ ...p, lightTextColor: e.target.value }))
+                          }
+                          className="w-4 h-4 border-0 bg-transparent cursor-pointer"
+                        />
+                        <span>{lang === 'ar' ? 'مخصص' : 'Custom'}</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Christmas Theme Toggle & Palettes */}
+              <div className="p-4 app-control border border-[var(--accent)]/30 bg-[var(--accent-soft)]/35 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <Snowflake className="w-5 h-5 text-[var(--accent)] shrink-0" />
+                  <div>
+                    <div className="text-sm font-bold text-stone-900 dark:text-white">
+                      {lang === 'ar'
+                        ? 'ثيم الكريسماس (ثلج وزينة وألوان احتفالية)'
+                        : 'Christmas Theme (Snow & Garland)'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateDraft((p) => ({
+                      ...p,
+                      christmasTheme: p.christmasTheme === false ? true : false,
+                    }))
+                  }
+                  className={`min-h-[34px] px-3.5 app-control text-xs font-bold cursor-pointer transition-colors shrink-0 ${
+                    draft.christmasTheme !== false
+                      ? 'bg-[var(--accent)] text-white'
+                      : 'bg-stone-200 dark:bg-white/10 text-stone-700 dark:text-stone-300'
+                  }`}
+                >
+                  {draft.christmasTheme !== false
+                    ? lang === 'ar'
+                      ? 'مفعّل'
+                      : 'On'
+                    : lang === 'ar'
+                    ? 'مُغلق'
+                    : 'Off'}
+                </button>
+              </div>
+
+              <div className="space-y-2.5">
+                <label className="block text-sm font-bold text-stone-800 dark:text-stone-100">
+                  {lang === 'ar'
+                    ? 'باقات ألوان متكاملة (أخضر + أحمر + ذهبي)'
+                    : 'Theme Color Palettes'}
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {CHRISTMAS_MULTI_THEMES.map((combo) => {
+                    const isSelected =
+                      draft.christmasTheme !== false &&
+                      draft.accentColor.toLowerCase() === combo.accentColor.toLowerCase() &&
+                      draft.darkCanvasColor.toLowerCase() === combo.darkCanvasColor.toLowerCase();
+                    return (
+                      <button
+                        key={combo.id}
+                        type="button"
+                        onClick={() =>
+                          updateDraft((p) => ({
+                            ...p,
+                            christmasTheme: true,
+                            accentColor: combo.accentColor,
+                            darkCanvasColor: combo.darkCanvasColor,
+                            lightCanvasColor: combo.lightCanvasColor,
+                          }))
+                        }
+                        className={`p-3 app-control border text-start space-y-2 cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                            : 'border-stone-200 dark:border-white/10 hover:bg-stone-100 dark:hover:bg-white/5'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          {combo.swatches.map((hex) => (
+                            <span
+                              key={hex}
+                              className="w-4 h-4 rounded-full border border-white/40"
+                              style={{ backgroundColor: hex }}
+                            />
+                          ))}
+                        </div>
+                        <div className="text-xs font-bold text-stone-800 dark:text-stone-100">
+                          {lang === 'ar' ? combo.nameAr : combo.nameEn}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Accent Color */}
+              <div className="space-y-2.5">
+                <label className="block text-sm font-bold text-stone-800 dark:text-stone-100">
+                  {lang === 'ar' ? 'اللون الرئيسي (Accent Color)' : 'Primary Accent Color'}
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  {ACCENT_PRESETS.map((preset) => (
+                    <button
+                      key={preset.hex}
+                      type="button"
+                      onClick={() => updateDraft((p) => ({ ...p, accentColor: preset.hex }))}
+                      className={`min-h-[36px] px-3 py-1.5 app-control border text-xs font-semibold flex items-center gap-2 cursor-pointer transition-colors ${
+                        draft.accentColor.toLowerCase() === preset.hex.toLowerCase()
+                          ? 'border-stone-900 dark:border-white bg-stone-100 dark:bg-white/10 text-stone-900 dark:text-white'
+                          : 'border-stone-200 dark:border-white/10 text-stone-600 dark:text-stone-300'
+                      }`}
+                    >
+                      <span
+                        className="w-4 h-4 rounded-full shrink-0"
+                        style={{ backgroundColor: preset.hex }}
+                      />
+                      <span>{lang === 'ar' ? preset.nameAr : preset.nameEn}</span>
+                    </button>
+                  ))}
+                  <label className="min-h-[36px] px-3 py-1.5 app-control border border-stone-200 dark:border-white/10 text-xs font-semibold flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="color"
+                      value={draft.accentColor}
+                      onChange={(e) => updateDraft((p) => ({ ...p, accentColor: e.target.value }))}
+                      className="w-5 h-5 border-0 bg-transparent cursor-pointer"
+                    />
+                    <span className="text-stone-700 dark:text-stone-300">
+                      {lang === 'ar' ? 'لون مخصص' : 'Custom'}
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Background Canvas Pickers */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-stone-600 dark:text-stone-300">
+                    {lang === 'ar' ? 'لون خلفية الوضع الداكن' : 'Dark Background Color'}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={draft.darkCanvasColor}
+                      onChange={(e) =>
+                        updateDraft((p) => ({ ...p, darkCanvasColor: e.target.value }))
+                      }
+                      className="w-10 h-10 rounded-lg border border-stone-300 dark:border-white/15 bg-transparent cursor-pointer"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => updateDraft((p) => ({ ...p, darkCanvasColor: '#181214' }))}
+                      className="text-xs font-semibold text-stone-500 hover:text-[var(--accent)] cursor-pointer"
+                    >
+                      {lang === 'ar' ? 'افتراضي' : 'Default'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-stone-600 dark:text-stone-300">
+                    {lang === 'ar' ? 'لون خلفية الوضع الفاتح' : 'Light Background Color'}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={draft.lightCanvasColor}
+                      onChange={(e) =>
+                        updateDraft((p) => ({ ...p, lightCanvasColor: e.target.value }))
+                      }
+                      className="w-10 h-10 rounded-lg border border-stone-300 dark:border-white/15 bg-transparent cursor-pointer"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => updateDraft((p) => ({ ...p, lightCanvasColor: '#FAF7F4' }))}
+                      className="text-xs font-semibold text-stone-500 hover:text-[var(--accent)] cursor-pointer"
+                    >
+                      {lang === 'ar' ? 'افتراضي' : 'Default'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Shapes: Radius, Card Style, Hero Icon, Progress Style & Size */}
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-stone-800 dark:text-stone-100">
+                  {lang === 'ar' ? 'شكل واستدارة الحواف' : 'Corner Radius Shape'}
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      ['sharp', lang === 'ar' ? 'حادة' : 'Sharp'],
+                      ['soft', lang === 'ar' ? 'ناعمة' : 'Soft'],
+                      ['rounded', lang === 'ar' ? 'دائرية' : 'Rounded'],
+                    ] as [RadiusPreset, string][]
+                  ).map(([preset, label]) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => updateDraft((p) => ({ ...p, radiusPreset: preset }))}
+                      className={`min-h-[40px] app-control border text-xs font-bold cursor-pointer transition-colors ${
+                        draft.radiusPreset === preset
+                          ? 'bg-[var(--accent)] text-white border-[var(--accent)]'
+                          : 'border-stone-200 dark:border-white/10 text-stone-700 dark:text-stone-300'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-stone-800 dark:text-stone-100">
+                  {lang === 'ar' ? 'نمط شكل البطاقات' : 'Card Surface Style'}
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      ['bordered', lang === 'ar' ? 'بحدود ناعمة' : 'Bordered'],
+                      ['elevated', lang === 'ar' ? 'بظل بارز' : 'Elevated'],
+                      ['flat', lang === 'ar' ? 'مسطّح' : 'Flat'],
+                    ] as [CardStylePreset, string][]
+                  ).map(([preset, label]) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => updateDraft((p) => ({ ...p, cardStyle: preset }))}
+                      className={`min-h-[40px] app-control border text-xs font-bold cursor-pointer transition-colors ${
+                        draft.cardStyle === preset
+                          ? 'bg-[var(--accent)] text-white border-[var(--accent)]'
+                          : 'border-stone-200 dark:border-white/10 text-stone-700 dark:text-stone-300'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-stone-800 dark:text-stone-100">
+                  {lang === 'ar' ? 'شكل الأيقونة الرئيسية' : 'Primary Hero Shape'}
+                </label>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {HERO_ICONS.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => updateDraft((p) => ({ ...p, heroIcon: item.key }))}
+                      className={`min-h-[54px] p-2 app-control border flex flex-col items-center justify-center gap-1 text-xs font-bold cursor-pointer transition-colors ${
+                        draft.heroIcon === item.key
+                          ? 'bg-[var(--accent)] text-white border-[var(--accent)]'
+                          : 'border-stone-200 dark:border-white/10 text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      <HeroSymbol icon={item.key} className="w-5 h-5" filled />
+                      <span>{lang === 'ar' ? item.labelAr : item.labelEn}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-stone-800 dark:text-stone-100">
+                  {lang === 'ar' ? 'شكل عرض التقدّم الرئيسي' : 'Main Progress Display Shape'}
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(
+                    [
+                      ['journey', lang === 'ar' ? 'الطريق إلى بيت لحم' : 'Road to Bethlehem'],
+                      ['heart', lang === 'ar' ? 'قلب التقدّم الكلاسيكي' : 'Classic Filling Heart'],
+                    ] as [ProgressStyle, string][]
+                  ).map(([styleKey, label]) => (
+                    <button
+                      key={styleKey}
+                      type="button"
+                      onClick={() =>
+                        updateDraft((p) => ({ ...p, progressStyle: styleKey, journeyMigrated: true }))
+                      }
+                      className={`min-h-[40px] px-3 app-control border text-xs font-bold cursor-pointer transition-colors ${
+                        (draft.progressStyle || 'journey') === styleKey
+                          ? 'bg-[var(--accent)] text-white border-[var(--accent)]'
+                          : 'border-stone-200 dark:border-white/10 text-stone-700 dark:text-stone-300'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-stone-800 dark:text-stone-100">
+                  {lang === 'ar' ? 'حجم عرض التقدّم' : 'Progress Display Size'}
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      ['sm', lang === 'ar' ? 'صغير' : 'Small'],
+                      ['md', lang === 'ar' ? 'متوسط' : 'Medium'],
+                      ['lg', lang === 'ar' ? 'كبير' : 'Large'],
+                    ] as [HeroIconSize, string][]
+                  ).map(([sz, label]) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => updateDraft((p) => ({ ...p, heroIconSize: sz }))}
+                      className={`min-h-[40px] app-control border text-xs font-bold cursor-pointer transition-colors ${
+                        draft.heroIconSize === sz
+                          ? 'bg-[var(--accent)] text-white border-[var(--accent)]'
+                          : 'border-stone-200 dark:border-white/10 text-stone-700 dark:text-stone-300'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}

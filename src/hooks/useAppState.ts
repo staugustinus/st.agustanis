@@ -403,13 +403,61 @@ export function useAppState() {
       root.classList.remove('dark');
     }
 
-    const { accentColor, lightCanvasColor, darkCanvasColor, radiusPreset, cardStyle } = state.config;
+    const {
+      accentColor,
+      lightCanvasColor,
+      darkCanvasColor,
+      lightTextColor,
+      darkTextColor,
+      fontPreset,
+      radiusPreset,
+      cardStyle,
+    } = state.config;
     root.style.setProperty('--accent', accentColor);
     root.style.setProperty('--accent-hover', darkenHex(accentColor, 0.16));
     root.style.setProperty('--accent-soft', hexToRgba(accentColor, 0.14));
     root.style.setProperty('--accent-glow', hexToRgba(accentColor, 0.28));
     root.style.setProperty('--canvas-light', lightCanvasColor);
     root.style.setProperty('--canvas-dark', darkCanvasColor);
+
+    if (lightTextColor && lightTextColor.trim()) {
+      root.style.setProperty('--text-light', lightTextColor.trim());
+      root.setAttribute('data-custom-light-text', 'true');
+    } else {
+      root.style.setProperty('--text-light', '#1C1718');
+      root.removeAttribute('data-custom-light-text');
+    }
+
+    if (darkTextColor && darkTextColor.trim()) {
+      root.style.setProperty('--text-dark', darkTextColor.trim());
+      root.setAttribute('data-custom-dark-text', 'true');
+    } else {
+      root.style.setProperty('--text-dark', '#F8F4F4');
+      root.removeAttribute('data-custom-dark-text');
+    }
+
+    const activeFont = fontPreset || 'cairo';
+    const fontStack =
+      activeFont === 'tajawal'
+        ? state.lang === 'en'
+          ? "'DM Sans', 'Tajawal', system-ui, sans-serif"
+          : "'Tajawal', 'DM Sans', system-ui, sans-serif"
+        : activeFont === 'almarai'
+        ? state.lang === 'en'
+          ? "'Outfit', 'Almarai', system-ui, sans-serif"
+          : "'Almarai', 'Outfit', system-ui, sans-serif"
+        : activeFont === 'amiri'
+        ? state.lang === 'en'
+          ? "'Lora', 'Amiri', Georgia, serif"
+          : "'Amiri', 'Lora', Georgia, serif"
+        : activeFont === 'rubik'
+        ? state.lang === 'en'
+          ? "'Manrope', 'Rubik', system-ui, sans-serif"
+          : "'Rubik', 'Manrope', system-ui, sans-serif"
+        : state.lang === 'en'
+        ? "'Plus Jakarta Sans', 'Cairo', system-ui, sans-serif"
+        : "'Cairo', 'Plus Jakarta Sans', system-ui, sans-serif";
+    root.style.setProperty('--font-ui', fontStack);
 
     const cardRadius =
       radiusPreset === 'sharp' ? '0.375rem' : radiusPreset === 'rounded' ? '1.75rem' : '1.125rem';
@@ -932,6 +980,18 @@ export function useAppState() {
         competition: nextConfig.competition,
         lentStartDate: nextConfig.lentStartDate,
         lentEndDate: nextConfig.lentEndDate,
+        accentColor: nextConfig.accentColor,
+        lightCanvasColor: nextConfig.lightCanvasColor,
+        darkCanvasColor: nextConfig.darkCanvasColor,
+        lightTextColor: nextConfig.lightTextColor || '',
+        darkTextColor: nextConfig.darkTextColor || '',
+        fontPreset: nextConfig.fontPreset || 'cairo',
+        radiusPreset: nextConfig.radiusPreset,
+        cardStyle: nextConfig.cardStyle,
+        heroIcon: nextConfig.heroIcon,
+        heroIconSize: nextConfig.heroIconSize,
+        progressStyle: nextConfig.progressStyle || 'journey',
+        christmasTheme: nextConfig.christmasTheme !== false,
         updatedAt: now,
       };
       setState((prev) => ({

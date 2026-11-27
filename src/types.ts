@@ -6,6 +6,7 @@ export type RadiusPreset = 'sharp' | 'soft' | 'rounded';
 export type CardStylePreset = 'bordered' | 'elevated' | 'flat';
 export type HeroIconSize = 'sm' | 'md' | 'lg';
 export type ProgressStyle = 'journey' | 'heart';
+export type FontPreset = 'cairo' | 'tajawal' | 'almarai' | 'amiri' | 'rubik';
 
 export interface GospelBook {
   nameAr: string;
@@ -105,6 +106,9 @@ export interface AppConfig {
   accentColor: string;
   lightCanvasColor: string;
   darkCanvasColor: string;
+  lightTextColor?: string;
+  darkTextColor?: string;
+  fontPreset?: FontPreset;
   radiusPreset: RadiusPreset;
   cardStyle: CardStylePreset;
   heroIcon: HeroIconKey;

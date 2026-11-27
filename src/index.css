@@ -9,8 +9,10 @@
     --accent-glow: rgba(220, 38, 38, 0.28);
     --canvas-light: #FAF7F4;
     --surface-light: #FFFFFF;
+    --text-light: #1C1718;
     --canvas-dark: #181214;
     --surface-dark: #22191C;
+    --text-dark: #F8F4F4;
     --radius-card: 1.125rem;
     --radius-control: 0.75rem;
     --card-border-opacity: 1;
@@ -25,21 +27,26 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  html[lang="en"] {
-    --font-ui: 'Plus Jakarta Sans', 'Cairo', system-ui, -apple-system, sans-serif;
-  }
-
   body {
+    font-family: var(--font-ui);
     background-color: var(--canvas-light);
-    color: #1C1718;
+    color: var(--text-light);
     transition: background-color 200ms cubic-bezier(0.16, 1, 0.3, 1),
       color 200ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   html.dark body {
     background-color: var(--canvas-dark);
-    color: #F8F4F4;
+    color: var(--text-dark);
   }
+}
+
+html:not(.dark)[data-custom-light-text="true"] :is(main, header, footer) :is(h1, h2, h3, h4, p, blockquote, label, .font-scripture) {
+  color: var(--text-light);
+}
+
+html.dark[data-custom-dark-text="true"] :is(main, header, footer) :is(h1, h2, h3, h4, p, blockquote, label, .font-scripture) {
+  color: var(--text-dark);
 }
 
 .font-ui {

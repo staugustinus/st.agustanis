@@ -22,6 +22,19 @@
           "type": "string",
           "maxLength": 20
         },
+        "lightTextColor": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "darkTextColor": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "fontPreset": {
+          "type": "string",
+          "enum": ["cairo", "tajawal", "almarai", "amiri", "rubik"],
+          "maxLength": 20
+        },
         "radiusPreset": {
           "type": "string",
           "enum": ["sharp", "soft", "rounded"],
